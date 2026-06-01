@@ -1,13 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  outputFileTracingRoot: __dirname,
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.output.globalObject = "self";
     }
     return config;
   },
-  swcMinify: true,
   // output: "export",
   images: {
     // unoptimized: true,

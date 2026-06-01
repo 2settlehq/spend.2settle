@@ -55,7 +55,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.439.0",
     "mysql2": "^3.11.5",
-    "next": "^14.2.18",
+    "next": "^15.5.16",
     "next-auth": "^4.24.10",
     "openai": "^5.8.2",
     "prompts": "link:@langchain/core/prompts",
@@ -111,6 +111,6 @@
     "typescript": "5.4.2",
     "typescript-eslint": "^8.16.0",
     "util": "^0.12.5",
-    "vitest": "^2.1.6"
+    "vitest": "^2.1.9"
   }
 }

@@ -241,6 +241,15 @@ function normalizeExtractedData(
     normalized.estimation = estimation === "crypt" ? "crypto" : estimation;
   }
 
+  if (
+    normalized.Amount &&
+    normalized.network &&
+    String(normalized.Amount) ===
+      String(normalized.network).replace(/\D/g, "")
+  ) {
+    normalized.Amount = "";
+  }
+
   if (!normalized.id) {
     const idMatch = phrase.toUpperCase().match(/\b2S-[A-Z0-9]{6}\b/);
     if (idMatch) {
@@ -257,9 +266,13 @@ function normalizeExtractedData(
 
     for (const match of amountMatches) {
       const extractedAmount = match[1]?.replace(/,/g, "");
+      const previousChar = phrase[match.index! - 1] ?? "";
+      const nextChar = phrase[match.index! + match[0].length] ?? "";
+      const isEmbeddedInWord = /[a-z]/i.test(previousChar) || /[a-z]/i.test(nextChar);
 
       if (
         extractedAmount &&
+        !isEmbeddedInWord &&
         extractedAmount.length !== 10 &&
         extractedAmount.length !== 11
       ) {
