@@ -54,18 +54,10 @@ export default async function handler(
     try {
       const [rows]: any = await connection.execute(
         `
-          SELECT COALESCE(
-            SUM(
-              CASE
-                WHEN exchange_rate IS NOT NULL AND exchange_rate > 0
-                THEN fiat_amount / exchange_rate
-                ELSE 0
-              END
-            ),
-            0
-          ) AS total
+          SELECT COALESCE(SUM(transaction_usd), 0) AS total
           FROM payment_sessions
           WHERE status = 'settled'
+            AND transaction_usd IS NOT NULL
         `,
       );
 
