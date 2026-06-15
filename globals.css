@@ -9,6 +9,21 @@ body {
   @apply font-Poppins;
 
 }
+
+@keyframes chat-launcher-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.chat-launcher-float {
+  animation: chat-launcher-float 3s ease-in-out infinite;
+}
+
 .navbar {
   font-family: "Poppins", sans-serif;
 }

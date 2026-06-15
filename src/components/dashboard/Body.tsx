@@ -1,10 +1,9 @@
+
 "use client";
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import ChatBot from "../../core/ChatBot";
-import CloseIcon from "@mui/icons-material/Close";
-import ChatBubbleOutlineIcon from "@mui/icons-material/Chat";
 import SendMoney from "./SendMoney";
 import { formatCurrency } from "../../helpers/format_currency";
 import { Button } from "@/components/ui/button";
@@ -156,94 +155,27 @@ export default function Body() {
     );
   };
   const renderChat = () => {
-    return isMobile ? (
+    const launcherSize =
+      isMobile || isTab ? "h-16 w-16" : isDeskTop ? "h-28 w-28" : "h-24 w-24";
+
+    return (
       <Button
-        className={`fixed bottom-8 right-8 h-16 w-16 rounded-full bg-blue-500 transition-transform transform ${
-          isOpen ? "rotate-90" : ""
-        } hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 z-50 shadow-[0_0_20px_rgba(0,0,0,0.4)] overflow-hidden ${
-          isMobile && isOpen ? "hidden" : ""
-        }`}
+        className={`fixed bottom-8 right-8 ${
+          isOpen ? "hidden" : launcherSize
+        } chat-launcher-float rounded-full bg-transparent p-0 transition-transform transform hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 z-50 shadow-none overflow-visible`}
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? "Close chat" : "Open chat"}
       >
-        <span className="text-white relative">
-          {isOpen ? (
-          ""
-            // <CloseIcon className="h-8 w-8" />
-          ) : (
-            <>
-              <ChatBubbleOutlineIcon className="h-8 w-8" />
-              <span className="absolute bottom-0 right-0 w-4 h-4 bg-blue-500 transform rotate-45 translate-x-1/2 translate-y-1/2"></span>
-            </>
-          )}
-        </span>
-      </Button>
-    ) : isTab ? (
-      <Button
-        className={`fixed bottom-8 right-8 ${isOpen ? "hidden" : "h-16 w-16"} rounded-full bg-blue-500 transition-transform transform ${
-          isOpen ? "rotate-90" : ""
-        } hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 z-50 shadow-[0_0_20px_rgba(0,0,0,0.4)] overflow-hidden ${
-          isMobile && isOpen ? "hidden" : ""
-        }`}
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label={isOpen ? "Close chat" : "Open chat"}
-      >
-        <span className="text-white relative">
-          {isOpen ? (
-            ""
-          ) : (
-            // <CloseIcon className="h-8 w-8" />
-            <>
-              <ChatBubbleOutlineIcon className="h-8 w-8" />
-              <span className="absolute bottom-0 right-0 w-4 h-4 bg-blue-500 transform rotate-45 translate-x-1/2 translate-y-1/2"></span>
-            </>
-          )}
-        </span>
-      </Button>
-    ) : isDeskTop ? (
-      <>
-        <Button
-          className={`fixed bottom-8 right-8 ${isOpen ? "hidden" : "h-32 w-32"} rounded-full bg-blue-500 transition-transform transform ${
-            isOpen ? "rotate-90" : ""
-          } hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 z-50 shadow-[0_0_20px_rgba(0,0,0,0.4)] overflow-hidden ${
-            isMobile && isOpen ? "hidden" : ""
-          }`}
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label={isOpen ? "Close chat" : "Open chat"}
-        >
-          <span className="text-white relative">
-            {isOpen ? (
-              ""
-            ) : (
-              // <CloseIcon className="h-24 w-24" />
-              <>
-                <ChatBubbleOutlineIcon className="h-24 w-24" />
-              </>
-            )}
-          </span>
-        </Button>
-      </>
-    ) : (
-      <Button
-        className={`fixed bottom-8 right-8 ${isOpen ? "hidden" : "h-24 w-24"} rounded-full bg-blue-500 transition-transform transform 
-           hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 z-50 shadow-[0_0_20px_rgba(0,0,0,0.4)] overflow-hidden ${
-             isMobile && isOpen ? "hidden" : ""
-           }`}
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label={isOpen ? "Close chat" : "Open chat"}
-      >
-        <span className="text-white relative">
-          {isOpen ? (
-            ""
-          ) : (
-            //       (
-            // <CloseIcon className="h-24 w-24" />
-            //       )
-            <>
-              <ChatBubbleOutlineIcon className="h-24 w-24" />
-            </>
-          )}
-        </span>
+        {!isOpen && (
+          <Image
+            src="/chat-icon.png"
+            alt="Open chat"
+            width={160}
+            height={160}
+            className="h-full w-full object-contain"
+            priority
+          />
+        )}
       </Button>
     );
   };
