@@ -48,3 +48,4 @@ middleware.ts
 CLAUDE*
 # .playwright-mcp
 
+.env*

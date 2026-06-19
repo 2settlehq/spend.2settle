@@ -15,7 +15,16 @@ import { handleClaimGift } from "@/features/chatbot/handlers/chatHandlers/handle
 import { handlePayRequest } from "@/features/chatbot/handlers/chatHandlers/handle.pay.request";
 import { handleCompleteTransactionId } from "@/features/chatbot/handlers/chatHandlers/handle.transaction.id";
 import { handleMakeAChoice } from "@/features/chatbot/handlers/chatHandlers/make.choice";
+import { helloMenu } from "@/features/chatbot/handlers/chatHandlers/hello.menu";
 import { displayWelcomeMenu } from "@/features/chatbot/handlers/chatHandlers/menus/welcome";
+import {
+  handleFraudsterWalletAddress,
+  handleMakeReport,
+  handleReporterName,
+  handleReporterPhoneNumber,
+  handleReporterWalletAddress,
+  handleReportlyNote,
+} from "@/features/chatbot/handlers/chatHandlers/reportly/handle.reportly";
 import { handleNetwork } from "@/features/chatbot/handlers/chatHandlers/network";
 import { handlePayOptions } from "@/features/chatbot/handlers/chatHandlers/payment.options";
 import { requestPayCard } from "@/features/chatbot/handlers/chatHandlers/request.pay.card";
@@ -109,22 +118,13 @@ const steps = [
   "payRequest",
   "assurance",
   "completeTransactionId",
+  "makeReport",
+  "reporterName",
   "reporterPhoneNumber",
-  // "confirmTransaction",
-  // "paymentProcessing",
-  // "kycInfo",
-  // "kycReg",
-  // "thankForKYCReg",
-  // "supportWelcome",
-  // "entreTrxId",
-  // "makeComplain",
-  // "giftFeedBack",
-  // "makeReport",
-  // "reporterName",
-  // "reporterWallet",
-  // "fraudsterWallet",
-  // "reportlyNote",
-  // "reporterFarwell",
+  "reporterWallet",
+  "fraudsterWallet",
+  "reportlyNote",
+  "reporterFarwell",
 ] as const;
 
 type StepId = (typeof steps)[number];
@@ -161,7 +161,13 @@ const stepHandlers: Record<
   enterPhone: async (chatInput) => handlePhoneNumber(chatInput),
   // allow user send their crypto payment
   sendPayment: async (chatInput) => handleCryptoPayment(chatInput),
-  reporterPhoneNumber: async (chatInput) => console.log("transferMoney step"),
+  makeReport: async (chatInput) => handleMakeReport(chatInput),
+  reporterName: async (chatInput) => handleReporterName(chatInput),
+  reporterPhoneNumber: async (chatInput) => handleReporterPhoneNumber(chatInput),
+  reporterWallet: async (chatInput) => handleReporterWalletAddress(chatInput),
+  fraudsterWallet: async (chatInput) => handleFraudsterWalletAddress(chatInput),
+  reportlyNote: async (chatInput) => handleReportlyNote(chatInput),
+  reporterFarwell: async (chatInput) => helloMenu(chatInput),
   howToEstimate: async () => console.log("transferMoney step"),
   transferMoney: async (chatInput) => handleTransferMoney(chatInput),
   payOptions: async (chatInput) => handlePayOptions(chatInput),

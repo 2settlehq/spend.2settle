@@ -1,490 +1,285 @@
-import { countWords } from "@/helpers/api_call/reportly_page_calls";
-import { MessageType } from "stores/chatStore";
+import {
+  countWords,
+  getLastReportId,
+  getNextReportID,
+  isValidWalletAddress,
+  makeAReport,
+} from "@/helpers/api_call/reportly_page_calls";
+import { formatPhoneNumber, phoneNumberPattern } from "@/utils/utilities";
+import useChatStore from "stores/chatStore";
+import { useReportlyStore } from "stores/reportlyStore";
+import { greetings } from "../../../helpers/ChatbotConsts";
+import { helloMenu } from "../hello.menu";
+import {
+  displayReportlyFarwell,
+  displayReportlyFraudsterWalletAddress,
+  displayReportlyName,
+  displayReportlyNote,
+  displayReportlyPhoneNumber,
+  displayReportlyReporterWalletAddress,
+  displayReportlyWelcome,
+} from "../menus/reportly/reportly.welcome";
 
-// export const handleReporterName = async (
-//   addChatMessages: (messages: MessageType[]) => void,
-//   chatInput: string,
-//   walletIsConnected: boolean,
-//   wallet: WalletAddress,
-//   telFirstName: string,
-//   nextStep: (step: string) => void,
-//   goToStep: (step: string) => void,
-//   setSharedReportlyReportType: (reportlyType: string) => void,
-//   setSharedPaymentMode: (mode: string) => void,
-// ) => {
-//   if (greetings.includes(chatInput.trim().toLowerCase())) {
-//     console.log("Going back to start");
-//     goToStep("start");
-//     helloMenu(
-//       addChatMessages,
-//       chatInput,
-//       nextStep,
-//       walletIsConnected,
-//       wallet,
-//       telFirstName,
-//       setSharedPaymentMode,
-//     );
-//   } else if (chatInput.trim() === "00") {
-//     (() => {
-//       console.log("Going back from handleReportlyWelcome");
-//       goToStep("start");
-//       helloMenu(
-//         addChatMessages,
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//     })();
-//   } else if (chatInput === "1") {
-//     setSharedReportlyReportType("Track Transaction");
-//     console.log("Omo, na to report Track Transaction");
-//     displayReportlyName(addChatMessages, nextStep);
-//   } else if (chatInput === "2") {
-//     console.log("Omo, na to report Stolen funds");
-//     setSharedReportlyReportType("Stolen funds | disappear funds");
-//     displayReportlyName(addChatMessages, nextStep);
-//   } else if (chatInput === "3") {
-//     console.log("Omo, na to report Fraud");
+// makeReport step: user picks report type (1/2/3)
+export const handleMakeReport = (chatInput: string) => {
+  const { next, prev, addMessages } = useChatStore.getState();
+  const { setReportType } = useReportlyStore.getState();
 
-//     setSharedReportlyReportType("Fraud");
-//     displayReportlyName(addChatMessages, nextStep);
-//   } else {
-//     addChatMessages([
-//       {
-//         type: "incoming",
-//         content:
-//           "Invalid choice. You need to choose an action from the options",
-//         timestamp: new Date(),
-//       },
-//     ]);
-//   }
-// };
-// Option to allow user tract transaction, enter name or goBack to the very start
-// export const handleEnterReporterPhoneNumber = async (
-//   addChatMessages: (messages: MessageType[]) => void,
-//   chatInput: string,
-//   reporterName: string,
-//   walletIsConnected: boolean,
-//   wallet: WalletAddress,
-//   telFirstName: string,
-//   nextStep: (step: string) => void,
-//   goToStep: (step: string) => void,
-//   setReporterName: (reporterName: string) => void,
-//   displayReportlyPhoneNumber: DisplayReportlyPhoneNumber,
-//   setSharedPaymentMode: (mode: string) => void,
-// ) => {
-//   if (greetings.includes(chatInput.trim().toLowerCase())) {
-//     console.log("Going back to start");
-//     goToStep("start");
-//     helloMenu(
-//       addChatMessages,
-//       chatInput,
-//       nextStep,
-//       walletIsConnected,
-//       wallet,
-//       telFirstName,
-//       setSharedPaymentMode,
-//     );
-//   } else if (chatInput.trim() === "00") {
-//     (() => {
-//       console.log("Going back from handleReportlyWelcome");
-//       goToStep("start");
-//       helloMenu(
-//         addChatMessages,
+  if (
+    greetings.includes(chatInput.trim().toLowerCase()) ||
+    chatInput.trim() === "00"
+  ) {
+    helloMenu("hi");
+  } else if (chatInput.trim() === "0") {
+    prev();
+  } else if (chatInput === "1") {
+    setReportType("Track Transaction");
+    displayReportlyName();
+    next({ stepId: "reporterName" });
+  } else if (chatInput === "2") {
+    setReportType("Stolen funds | disappear funds");
+    displayReportlyName();
+    next({ stepId: "reporterName" });
+  } else if (chatInput === "3") {
+    setReportType("Fraud");
+    displayReportlyName();
+    next({ stepId: "reporterName" });
+  } else {
+    addMessages([
+      {
+        type: "incoming",
+        content: "Invalid choice. You need to choose an action from the options",
+        timestamp: new Date(),
+      },
+    ]);
+  }
+};
 
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//     })();
-//   } else if (chatInput.trim() === "0") {
-//     (() => {
-//       goToStep("reporterName");
-//       displayReportlyName(addChatMessages, nextStep);
-//     })();
-//   } else {
-//     const name = chatInput.trim();
+// reporterName step: user types their full name
+export const handleReporterName = (chatInput: string) => {
+  const { next, prev, addMessages } = useChatStore.getState();
+  const { setReporterName } = useReportlyStore.getState();
 
-//     if (name === "") {
-//       const newMessages: MessageType[] = [
-//         {
-//           type: "incoming",
-//           content: (
-//             <span>
-//               Please enter a your name. You can not summit an empty space
-//             </span>
-//           ),
-//           timestamp: new Date(),
-//         },
-//       ];
-//       addChatMessages(newMessages);
-//       return;
-//     }
-//     setReporterName(chatInput.trim());
-//     console.log(`Full name is ${reporterName}`);
-//     displayReportlyPhoneNumber(addChatMessages, nextStep);
-//   }
-// };
+  if (
+    greetings.includes(chatInput.trim().toLowerCase()) ||
+    chatInput.trim() === "00"
+  ) {
+    helloMenu("hi");
+  } else if (chatInput.trim() === "0") {
+    prev();
+    displayReportlyWelcome();
+  } else {
+    const name = chatInput.trim();
+    if (!name) {
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>Please enter your name. You cannot submit an empty value.</span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+    setReporterName(name);
+    displayReportlyPhoneNumber();
+    next({ stepId: "reporterPhoneNumber" });
+  }
+};
 
-// export const handleEnterReporterWalletAddress = async (
-//   addChatMessages: (messages: MessageType[]) => void,
-//   chatInput: string,
-//   reporterPhoneNumber: string,
-//   walletIsConnected: boolean,
-//   wallet: WalletAddress,
-//   telFirstName: string,
-//   nextStep: (step: string) => void,
-//   goToStep: (step: string) => void,
-//   prevStep: () => void,
-//   setReporterPhoneNumber: (phoneNumber: React.SetStateAction<string>) => void,
-//   setSharedPaymentMode: (mode: string) => void,
-// ) => {
-//   if (greetings.includes(chatInput.trim().toLowerCase())) {
-//     console.log("Going back to start");
-//     goToStep("start");
-//     helloMenu(
-//       addChatMessages,
-//       chatInput,
-//       nextStep,
-//       walletIsConnected,
-//       wallet,
-//       telFirstName,
-//       setSharedPaymentMode,
-//     );
-//   } else if (chatInput.trim() === "00") {
-//     (() => {
-//       console.log("Going back from handleReportlyWelcome");
-//       goToStep("start");
-//       helloMenu(
-//         addChatMessages,
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//     })();
-//   } else if (chatInput.trim() === "0") {
-//     (() => {
-//       prevStep();
-//       displayReportlyName(addChatMessages, nextStep);
-//     })();
-//   } else {
-//     let phoneNumber = chatInput.trim();
-//     if (!phoneNumberPattern.test(phoneNumber)) {
-//       const newMessages: MessageType[] = [
-//         {
-//           type: "incoming",
-//           content: (
-//             <span>
-//               Please enter a valid phone number, <b>{phoneNumber}</b> is not a
-//               valid phone number.
-//             </span>
-//           ),
-//           timestamp: new Date(),
-//         },
-//       ];
-//       addChatMessages(newMessages);
-//       return;
-//     }
-//     setReporterPhoneNumber(phoneNumber);
-//     console.log(`Reporter phone number  is ${reporterPhoneNumber}`);
-//     displayReportlyReporterWalletAddress(addChatMessages, nextStep);
-//   }
-// };
+// reporterPhoneNumber step: user types their phone number
+export const handleReporterPhoneNumber = (chatInput: string) => {
+  const { next, prev, addMessages } = useChatStore.getState();
+  const { setReporterPhoneNumber } = useReportlyStore.getState();
 
-// export const handleEnterFraudsterWalletAddress = async (
-//   addChatMessages: (messages: MessageType[]) => void,
-//   chatInput: string,
-//   walletIsConnected: boolean,
-//   wallet: WalletAddress,
-//   telFirstName: string,
-//   nextStep: (step: string) => void,
-//   goToStep: (step: string) => void,
-//   prevStep: () => void,
-//   setReportId: (reportId: string) => void,
-//   setReporterWalletAddress: (wallet: string) => void,
-//   displayReportlyPhoneNumber: DisplayReportlyPhoneNumber,
-//   setSharedPaymentMode: (mode: string) => void,
-// ) => {
-//   if (greetings.includes(chatInput.trim().toLowerCase())) {
-//     console.log("Going back to start");
-//     goToStep("start");
-//     helloMenu(
-//       addChatMessages,
-//       chatInput,
-//       nextStep,
-//       walletIsConnected,
-//       wallet,
-//       telFirstName,
-//       setSharedPaymentMode,
-//     );
-//   } else if (chatInput.trim() === "00") {
-//     (() => {
-//       console.log("Going back from handleReportlyWelcome");
-//       goToStep("start");
-//       helloMenu(
-//         addChatMessages,
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//     })();
-//   } else if (chatInput.trim() === "0") {
-//     (() => {
-//       prevStep();
-//       displayReportlyPhoneNumber(addChatMessages, nextStep);
-//     })();
-//   } else {
-//     const wallet = chatInput.trim();
-//     const lastReportId = async () => {
-//       try {
-//         const lastReportId = await getLastReportId();
-//         const lastId = getNextReportID(lastReportId);
-//         const report_id = `Report_${lastId}`;
+  if (
+    greetings.includes(chatInput.trim().toLowerCase()) ||
+    chatInput.trim() === "00"
+  ) {
+    helloMenu("hi");
+  } else if (chatInput.trim() === "0") {
+    prev();
+    displayReportlyName();
+  } else {
+    const phoneNumber = chatInput.trim();
+    if (!phoneNumberPattern.test(phoneNumber)) {
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>
+              Please enter a valid phone number. <b>{phoneNumber}</b> is not
+              valid.
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+    setReporterPhoneNumber(phoneNumber);
+    displayReportlyReporterWalletAddress();
+    next({ stepId: "reporterWallet" });
+  }
+};
 
-//         setReportId(report_id);
-//       } catch (e) {
-//         console.log("we got into a challenge bro", e);
-//       }
-//     };
-//     lastReportId();
-//     if (!isValidWalletAddress(wallet)) {
-//       const newMessages: MessageType[] = [
-//         {
-//           type: "incoming",
-//           content: (
-//             <span>
-//               Please enter a valid wallet address, <b>{wallet}</b> is not a
-//               valid wallet address.
-//             </span>
-//           ),
-//           timestamp: new Date(),
-//         },
-//       ];
-//       addChatMessages(newMessages);
-//       return;
-//     }
-//     setReporterWalletAddress(wallet);
+// reporterWallet step: user types their own wallet address + report ID is generated
+export const handleReporterWalletAddress = async (chatInput: string) => {
+  const { next, prev, addMessages } = useChatStore.getState();
+  const { setReporterWalletAddress, setReportId } =
+    useReportlyStore.getState();
 
-//     displayReportlyFraudsterWalletAddress(addChatMessages, nextStep);
-//   }
-// };
+  if (
+    greetings.includes(chatInput.trim().toLowerCase()) ||
+    chatInput.trim() === "00"
+  ) {
+    helloMenu("hi");
+  } else if (chatInput.trim() === "0") {
+    prev();
+    displayReportlyPhoneNumber();
+  } else {
+    const wallet = chatInput.trim();
+    if (!isValidWalletAddress(wallet)) {
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>
+              Please enter a valid wallet address. <b>{wallet}</b> is not valid.
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+    setReporterWalletAddress(wallet);
+    try {
+      const lastId = await getLastReportId();
+      setReportId(`Report_${getNextReportID(lastId)}`);
+    } catch (e) {
+      console.error("Failed to generate report ID:", e);
+    }
+    displayReportlyFraudsterWalletAddress();
+    next({ stepId: "fraudsterWallet" });
+  }
+};
 
-// export const handleReportlyNote = async (
-//   addChatMessages: (messages: MessageType[]) => void,
-//   chatInput: string,
-//   walletIsConnected: boolean,
-//   wallet: WalletAddress,
-//   telFirstName: string,
-//   nextStep: (step: string) => void,
-//   goToStep: (step: string) => void,
-//   prevStep: () => void,
-//   setFraudsterWalletAddress: (wallet: string) => void,
-//   displayReportlyNote: DisplayReportlyPhoneNumber,
-//   setSharedPaymentMode: (mode: string) => void,
-// ) => {
-//   if (greetings.includes(chatInput.trim().toLowerCase())) {
-//     console.log("Going back to start");
-//     goToStep("start");
-//     helloMenu(
-//       addChatMessages,
-//       chatInput,
-//       nextStep,
-//       walletIsConnected,
-//       wallet,
-//       telFirstName,
-//       setSharedPaymentMode,
-//     );
-//   } else if (chatInput.trim() === "00") {
-//     (() => {
-//       console.log("Going back from handleReportlyWelcome");
-//       goToStep("start");
-//       helloMenu(
-//         addChatMessages,
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//     })();
-//   } else if (chatInput.trim() === "0") {
-//     (() => {
-//       prevStep();
-//       displayReportlyReporterWalletAddress(addChatMessages, nextStep);
-//     })();
-//   } else if (chatInput.trim() === "1") {
-//     (() => {
-//       goToStep("reportlyNote");
-//       displayReportlyNote(addChatMessages, nextStep);
-//     })();
-//   } else {
-//     const wallet = chatInput.trim();
-//     if (!isValidWalletAddress(wallet)) {
-//       const newMessages: MessageType[] = [
-//         {
-//           type: "incoming",
-//           content: (
-//             <span>
-//               Please enter a valid wallet address, <b>{wallet}</b> is not a
-//               valid wallet address.
-//             </span>
-//           ),
-//           timestamp: new Date(),
-//         },
-//       ];
-//       addChatMessages(newMessages);
-//       return;
-//     }
+// fraudsterWallet step: user enters fraudster wallet or skips with "1"
+export const handleFraudsterWalletAddress = (chatInput: string) => {
+  const { next, prev, addMessages } = useChatStore.getState();
+  const { setFraudsterWalletAddress } = useReportlyStore.getState();
 
-//     setFraudsterWalletAddress(wallet);
-//     displayReportlyNote(addChatMessages, nextStep);
-//   }
-// };
+  if (
+    greetings.includes(chatInput.trim().toLowerCase()) ||
+    chatInput.trim() === "00"
+  ) {
+    helloMenu("hi");
+  } else if (chatInput.trim() === "0") {
+    prev();
+    displayReportlyReporterWalletAddress();
+  } else if (chatInput.trim() === "1") {
+    setFraudsterWalletAddress("");
+    displayReportlyNote();
+    next({ stepId: "reportlyNote" });
+  } else {
+    const wallet = chatInput.trim();
+    if (!isValidWalletAddress(wallet)) {
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>
+              Please enter a valid wallet address. <b>{wallet}</b> is not valid.
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+    setFraudsterWalletAddress(wallet);
+    displayReportlyNote();
+    next({ stepId: "reportlyNote" });
+  }
+};
 
-// export const handleReporterFarwell = async (
-//   addChatMessages: (messages: MessageType[]) => void,
-//   chatInput: string,
-//   reporterName: string,
-//   reporterPhoneNumber: string,
-//   reporterWalletAddress: string,
-//   fraudsterWalletAddress: string,
-//   sharedReportlyReportType: string,
-//   reportId: string,
-//   walletIsConnected: boolean,
-//   wallet: WalletAddress,
-//   telFirstName: string,
-//   nextStep: (step: string) => void,
-//   goToStep: (step: string) => void,
-//   prevStep: () => void,
-//   setDescriptionNote: (note: string) => void,
-//   setReporterPhoneNumber: (phoneNumber: string) => void,
-//   setReporterWalletAddress: (wallet: string) => void,
-//   setFraudsterWalletAddress: (fraudsterWallet: string) => void,
-//   setReporterName: (reporterName: string) => void,
-//   setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-//   setSharedPaymentMode: (mode: string) => void,
-// ) => {
-//   if (greetings.includes(chatInput.trim().toLowerCase())) {
-//     console.log("Going back to start");
-//     goToStep("start");
-//     helloMenu(
-//       addChatMessages,
-//       chatInput,
-//       nextStep,
-//       walletIsConnected,
-//       wallet,
-//       telFirstName,
-//       setSharedPaymentMode,
-//     );
-//   } else if (chatInput.trim() === "00") {
-//     (() => {
-//       console.log("Going back from handleReportlyWelcome");
-//       goToStep("start");
-//       helloMenu(
-//         addChatMessages,
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//     })();
-//   } else if (chatInput.trim() === "0") {
-//     (() => {
-//       prevStep();
-//       displayReportlyFraudsterWalletAddress(addChatMessages, nextStep);
-//     })();
-//   } else {
-//     const note = chatInput.trim();
+// reportlyNote step: user describes what happened, then report is submitted
+export const handleReportlyNote = async (chatInput: string) => {
+  const { prev, addMessages, setLoading } = useChatStore.getState();
+  const {
+    reportType,
+    reporterName,
+    reporterPhoneNumber,
+    reporterWalletAddress,
+    fraudsterWalletAddress,
+    reportId,
+    setDescriptionNote,
+    reset,
+  } = useReportlyStore.getState();
 
-//     const wordCount = countWords(note);
-
-//     if (!(wordCount <= 100)) {
-//       console.log("word count is: ", wordCount);
-//       const newMessages: MessageType[] = [
-//         {
-//           type: "incoming",
-//           content: (
-//             <span>
-//               Please enter a note within the specified word count. Your note is{" "}
-//               {wordCount} words long. The maximum allowed is 100 words.
-//             </span>
-//           ),
-//           timestamp: new Date(),
-//         },
-//       ];
-//       addChatMessages(newMessages);
-//       return;
-//     }
-
-//     setDescriptionNote(note);
-
-//     const reportData: reportData = {
-//       name: reporterName,
-//       phone_Number: formatPhoneNumber(reporterPhoneNumber),
-//       wallet_address: reporterWalletAddress,
-//       fraudster_wallet_address: fraudsterWalletAddress,
-//       description: note,
-//       complaint: sharedReportlyReportType,
-//       status: "pending",
-//       report_id: reportId,
-//       confirmer: "",
-//     };
-//     setLoading(true);
-//     try {
-//       await makeAReport(reportData);
-//       // re write write_report api to throw error if we get any response other than 200
-//       // if (response.status !== 200) {
-//       //   throw new Error(`API responded with status ${response.status}`);
-//       // }
-//       setReporterName("");
-//       setReporterPhoneNumber("");
-//       setReporterWalletAddress("");
-//       setFraudsterWalletAddress("");
-//       setDescriptionNote("");
-//       displayReportlyFarwell(addChatMessages, nextStep);
-//       helloMenu(
-//         addChatMessages,
-//         "hi",
-//         nextStep,
-//         walletIsConnected,
-//         wallet,
-//         telFirstName,
-//         setSharedPaymentMode,
-//       );
-//       setLoading(false);
-//     } catch (error) {
-//       setLoading(false);
-//       addChatMessages([
-//         {
-//           type: "incoming",
-//           content: (
-//             <span>
-//               Aje!!, there was a issue saving the report.
-//               <br />
-//               Maybe check your internet and try again or say 'hi' to go to the
-//               start of the conversation
-//             </span>
-//           ),
-//           timestamp: new Date(),
-//         },
-//       ]);
-//       console.log("Aje!!, there was a issue saving the report", error);
-//     }
-//     return;
-//   }
-// };
+  if (
+    greetings.includes(chatInput.trim().toLowerCase()) ||
+    chatInput.trim() === "00"
+  ) {
+    helloMenu("hi");
+  } else if (chatInput.trim() === "0") {
+    prev();
+    displayReportlyFraudsterWalletAddress();
+  } else {
+    const note = chatInput.trim();
+    const wordCount = countWords(note);
+    if (wordCount > 100) {
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>
+              Please keep your note within 100 words. Yours is {wordCount}{" "}
+              words.
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+    setDescriptionNote(note);
+    setLoading(true);
+    try {
+      await makeAReport({
+        name: reporterName,
+        phone_Number: formatPhoneNumber(reporterPhoneNumber),
+        wallet_address: reporterWalletAddress,
+        fraudster_wallet_address: fraudsterWalletAddress,
+        description: note,
+        complaint: reportType,
+        status: "pending",
+        report_id: reportId,
+        confirmer: "",
+      });
+      reset();
+      displayReportlyFarwell();
+      helloMenu("hi");
+    } catch (error) {
+      console.error("Report submission failed:", error);
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>
+              There was an issue saving the report.
+              <br />
+              Please check your internet and try again, or say &apos;hi&apos;
+              to start over.
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+};

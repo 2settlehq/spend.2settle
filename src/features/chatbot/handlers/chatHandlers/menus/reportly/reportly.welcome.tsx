@@ -23,133 +23,117 @@ export const displayReportlyWelcome = async () => {
       timestamp: new Date(),
     },
   ];
-  console.log("Next is reporterName");
   addMessages(newMessages);
 };
 
+export const displayReportlyName = () => {
+  const { addMessages } = useChatStore.getState();
+  addMessages([
+    {
+      type: "incoming",
+      content: (
+        <span>
+          Please enter your full name
+          <br />
+          00. Exit
+        </span>
+      ),
+      timestamp: new Date(),
+    },
+  ]);
+};
 
-// export const displayReportlyName = async () => {
-//     const { addMessages } = useChatStore.getState();
-//   const newMessages: MessageType[] = [
-//     {
-//       type: "incoming",
-//       content: (
-//         <span>
-//           Please enter your full name
-//           <br />
-//           00. Exit
-//         </span>
-//       ),
-//       timestamp: new Date(),
-//     },
-//   ];
-//   console.log("Next is reporterPhoneNumber");
-//   next("reporterPhoneNumber");
-//   addMessages(newMessages);
-// };
-// export const displayReportlyPhoneNumber = async () => {
-//     const { addMessages } = useChatStore.getState();
-//   const newMessages: MessageType[] = [
-//     {
-//       type: "incoming",
-//       content: (
-//         <span>
-//           Please enter your phone number
-//           <br />
-//           0. Go back
-//           <br />
-//           00. Exit
-//         </span>
-//       ),
-//       timestamp: new Date(),
-//     },
-//   ];
-//   console.log("Next is reporterWallet");
-//   next("reporterWallet");
-//   addMessages(newMessages);
-// };
-// export const displayReportlyReporterWalletAddress = async () => {
-//     const { addMessages } = useChatStore.getState();
-//   const newMessages: MessageType[] = [
-//     {
-//       type: "incoming",
-//       content: (
-//         <span>
-//           Please enter your wallet address
-//           <br />
-//           0. Go back
-//           <br />
-//           00. Exit
-//         </span>
-//       ),
-//       timestamp: new Date(),
-//     },
-//   ];
-//   console.log("Next is fraudsterWallet");
-//   next("fraudsterWallet");
-//   addMessages(newMessages);
-// };
-// export const displayReportlyFraudsterWalletAddress = async () => {
-//     const { addMessages } = useChatStore.getState();
-//   const newMessages: MessageType[] = [
-//     {
-//       type: "incoming",
-//       content: (
-//         <span>
-//           Please enter the fraudster wallet address (optional)
-//           <br />
-//           1. Skip
-//           <br />
-//           0. Go back
-//           <br />
-//           00. Exit
-//         </span>
-//       ),
-//       timestamp: new Date(),
-//     },
-//   ];
-//   console.log("Next is reportlyNote");
-//   next("reportlyNote");
-//   addMessages(newMessages);
-// };
-// export const displayReportlyNote = async () => {
-//     const { addMessages } = useChatStore.getState();
-//   const newMessages: MessageType[] = [
-//     {
-//       type: "incoming",
-//       content: (
-//         <span>
-//           Explain what happened in less than 100 words
-//           <br />
-//           0. Go back
-//           <br />
-//           00. Exit
-//         </span>
-//       ),
-//       timestamp: new Date(),
-//     },
-//   ];
-//   console.log("Next is reporterFarwell");
-//   next("reporterFarwell");
-//   addMessages(newMessages);
-// };
-// export const displayReportlyFarwell = async () => {
-//     const { addMessages } = useChatStore.getState();
-//   const newMessages: MessageType[] = [
-//     {
-//       type: "incoming",
-//       content: (
-//         <span>
-//           Thank you for submitting the report,
-//           <br />
-//           We get back to you shortly
-//         </span>
-//       ),
-//       timestamp: new Date(),
-//     },
-//     // go to home back
-//   ];
-//   console.log("Next is start");
-//   next("start");
-//   addMessages(newMessages);
-// };
+export const displayReportlyPhoneNumber = () => {
+  const { addMessages } = useChatStore.getState();
+  addMessages([
+    {
+      type: "incoming",
+      content: (
+        <span>
+          Please enter your phone number
+          <br />
+          0. Go back
+          <br />
+          00. Exit
+        </span>
+      ),
+      timestamp: new Date(),
+    },
+  ]);
+};
+
+export const displayReportlyReporterWalletAddress = () => {
+  const { addMessages } = useChatStore.getState();
+  addMessages([
+    {
+      type: "incoming",
+      content: (
+        <span>
+          Please enter your wallet address
+          <br />
+          0. Go back
+          <br />
+          00. Exit
+        </span>
+      ),
+      timestamp: new Date(),
+    },
+  ]);
+};
+
+export const displayReportlyFraudsterWalletAddress = () => {
+  const { addMessages } = useChatStore.getState();
+  addMessages([
+    {
+      type: "incoming",
+      content: (
+        <span>
+          Please enter the fraudster wallet address (optional)
+          <br />
+          1. Skip
+          <br />
+          0. Go back
+          <br />
+          00. Exit
+        </span>
+      ),
+      timestamp: new Date(),
+    },
+  ]);
+};
+
+export const displayReportlyNote = () => {
+  const { addMessages } = useChatStore.getState();
+  addMessages([
+    {
+      type: "incoming",
+      content: (
+        <span>
+          Explain what happened in less than 100 words
+          <br />
+          0. Go back
+          <br />
+          00. Exit
+        </span>
+      ),
+      timestamp: new Date(),
+    },
+  ]);
+};
+
+export const displayReportlyFarwell = () => {
+  const { addMessages } = useChatStore.getState();
+  addMessages([
+    {
+      type: "incoming",
+      content: (
+        <span>
+          Thank you for submitting the report.
+          <br />
+          We will get back to you shortly.
+        </span>
+      ),
+      timestamp: new Date(),
+    },
+  ]);
+};
