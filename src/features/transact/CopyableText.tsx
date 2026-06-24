@@ -13,7 +13,6 @@ import useChatStore from "stores/chatStore";
 import { useStatusStore } from "stores/statusStore";
 
 const TERMINAL_STATUSES = ["settled", "failed", "settlement_reversed"];
-
 function toTimeMs(value?: Date | string | number | null): number | undefined {
   if (!value) return undefined;
 
