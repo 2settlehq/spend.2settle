@@ -27,8 +27,16 @@ import { useConfirmDialogStore } from "stores/useConfirmDialogStore";
 import { useStatusStore } from "stores/statusStore";
 
 interface CountdownTimerProps {
-  expiryTime: Date;
+  expiryTime: Date | string | number;
   reference?: string;
+}
+
+function toTimeMs(value?: Date | string | number | null): number | undefined {
+  if (!value) return undefined;
+
+  const timeMs = value instanceof Date ? value.getTime() : new Date(value).getTime();
+
+  return Number.isFinite(timeMs) ? timeMs : undefined;
 }
 
 export const CountdownTimer: React.FC<CountdownTimerProps> = ({
@@ -47,12 +55,12 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const patchStatus = useStatusStore((state) => state.patchStatus);
   const currentStatus = statusRecord?.status ?? "pending";
   const effectiveExpiryTimeMs = statusRecord?.expiresAt
-    ? new Date(statusRecord.expiresAt).getTime()
-    : expiryTime.getTime();
+    ? toTimeMs(statusRecord.expiresAt)
+    : toTimeMs(expiryTime);
   const effectiveExpiryTime =
     typeof effectiveExpiryTimeMs === "number"
       ? new Date(effectiveExpiryTimeMs)
-      : expiryTime;
+      : undefined;
   const hasWalletExpired = useCallback(() => {
     return typeof effectiveExpiryTimeMs === "number"
       ? effectiveExpiryTimeMs <= Date.now()

@@ -11,6 +11,7 @@ import { chatPrompt } from "../../../services/ai/ai-endpoint-service";
 import * as dotenv from "dotenv";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
+import axios from "axios";
 
 import crypto from "crypto";
 import {
@@ -30,6 +31,14 @@ import { chat } from "googleapis/build/src/apis/chat";
 // at top of the file (outside handler)
 type Sess = Record<string, any>;
 type PaymentType = "transfer" | "gift" | "request";
+type CopyableItem = {
+  label: string;
+  text: string;
+  isWallet?: boolean;
+  reference?: string;
+  paymentType?: string;
+  expiresAt?: string | null;
+};
 
 const SUPPORTED_CRYPTO = new Set(["BTC", "ETH", "BNB", "TRON", "USDT"]);
 const SUPPORTED_USDT_NETWORKS = new Set(["ERC20", "TRC20", "BEP20"]);
@@ -52,12 +61,22 @@ interface CreatePaymentInput {
   type: "transfer" | "gift" | "request";
   fiatAmount: number;
   fiatCurrency?: string;
+  estimateAmount?: number;
+  estimateAsset?: string;
   crypto?: string;
   network?: string;
   chargeFrom?: "fiat" | "crypto";
   payer?: { chatId: string; phone?: string };
   receiver?: { bankCode: string; accountNumber: string };
 }
+
+type AiEstimateAsset = "naira" | "dollar" | "crypto";
+
+type AiPaymentEstimate = {
+  fiatAmount: number;
+  estimateAmount: number;
+  estimateAsset: AiEstimateAsset;
+};
 
 interface PaymentResponse {
   success: boolean;
@@ -118,7 +137,7 @@ dotenv.config();
 
 const model = new ChatOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  model: "google/gemini-2.0-flash-lite-001",
+  model: "~google/gemini-flash-latest",
   configuration: {
     baseURL: "https://openrouter.ai/api/v1",
   },
@@ -302,6 +321,111 @@ function isValidAmount(value: unknown) {
   return Number.isFinite(amount) && amount > 0;
 }
 
+function normalizeEstimateAsset(value: unknown): AiEstimateAsset {
+  const estimateAsset = String(value ?? "").trim().toLowerCase();
+
+  if (estimateAsset === "dollar" || estimateAsset === "usd" || estimateAsset === "usdt") {
+    return "dollar";
+  }
+
+  if (estimateAsset === "crypto" || estimateAsset === "crypt") {
+    return "crypto";
+  }
+
+  return "naira";
+}
+
+function parseRateValue(value: unknown): number {
+  const rate =
+    typeof value === "number"
+      ? value
+      : Number(String(value ?? "").replace(/,/g, ""));
+
+  if (!Number.isFinite(rate) || rate <= 0) {
+    throw new Error("Invalid rate received");
+  }
+
+  return rate;
+}
+
+async function fetchAiRate(): Promise<number> {
+  const engineBase =
+    process.env.NEXT_PUBLIC_SETTLE_API_URL ?? "http://localhost:3500/v1";
+  const response = await axios.get<{
+    rate?: string | number;
+    rateNumeric?: string | number;
+  }>(`${engineBase}/rate/all`);
+
+  return parseRateValue(response.data.rateNumeric ?? response.data.rate);
+}
+
+async function fetchAiCryptoPrice(cryptoAsset: string): Promise<number> {
+  const normalizedSymbol = cryptoAsset.toUpperCase();
+  const symbol = normalizedSymbol === "TRON" ? "TRX" : normalizedSymbol;
+
+  if (symbol === "USDT") {
+    return 1;
+  }
+
+  const response = await axios.get(
+    "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
+    {
+      params: { symbol },
+      headers: {
+        "X-CMC_PRO_API_KEY": process.env.COINMARKETCAP_API_KEY,
+      },
+    },
+  );
+
+  const price = Number(response.data.data[symbol].quote.USD.price);
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error(`Invalid ${symbol} price received`);
+  }
+
+  return price;
+}
+
+async function buildAiPaymentEstimate(
+  amountValue: unknown,
+  estimateAssetValue: unknown,
+  cryptoAsset: string,
+): Promise<AiPaymentEstimate> {
+  const estimateAmount = Number(amountValue);
+
+  if (!Number.isFinite(estimateAmount) || estimateAmount <= 0) {
+    throw new Error("Payment amount must be positive");
+  }
+
+  const estimateAsset = normalizeEstimateAsset(estimateAssetValue);
+
+  if (estimateAsset === "naira") {
+    return {
+      fiatAmount: estimateAmount,
+      estimateAmount,
+      estimateAsset,
+    };
+  }
+
+  const rate = await fetchAiRate();
+
+  if (estimateAsset === "dollar") {
+    return {
+      fiatAmount: estimateAmount * rate,
+      estimateAmount,
+      estimateAsset,
+    };
+  }
+
+  const assetPrice = await fetchAiCryptoPrice(cryptoAsset);
+
+  return {
+    fiatAmount: estimateAmount * assetPrice * rate,
+    estimateAmount,
+    estimateAsset,
+  };
+}
+
 function getMissingFields(updatedSession: Sess) {
   const type = (updatedSession.type || "transfer") as PaymentType;
   const missing: string[] = [];
@@ -392,6 +516,57 @@ function applyConversationState(updatedSession: Sess) {
   return updatedSession;
 }
 
+function addCopyableItem(
+  items: CopyableItem[],
+  seen: Set<string>,
+  label: string,
+  text: unknown,
+  options: Omit<CopyableItem, "label" | "text"> = {},
+) {
+  if (typeof text !== "string" && typeof text !== "number") return;
+
+  const value = String(text).trim();
+  if (!value || ["undefined", "null", "none"].includes(value.toLowerCase())) {
+    return;
+  }
+
+  const key = `${label}:${value}`;
+  if (seen.has(key)) return;
+
+  seen.add(key);
+  items.push({ label, text: value, ...options });
+}
+
+function getCopyableItemsFromSession(updatedSession: Sess): CopyableItem[] {
+  const items: CopyableItem[] = [];
+  const seen = new Set<string>();
+  const paymentType = updatedSession.type?.toLowerCase();
+  const reference = updatedSession.id;
+
+  addCopyableItem(items, seen, "Wallet Address", updatedSession.wallet_address, {
+    isWallet: true,
+    reference,
+    paymentType,
+    expiresAt: updatedSession.expiresAt,
+  });
+
+  addCopyableItem(items, seen, "Transaction ID", updatedSession.id);
+
+  if (paymentType === "gift") {
+    addCopyableItem(items, seen, "Gift ID", updatedSession.id);
+  }
+
+  if (paymentType === "transfer") {
+    addCopyableItem(items, seen, "Transfer ID", updatedSession.id);
+  }
+
+  if (paymentType === "request") {
+    addCopyableItem(items, seen, "Request ID", updatedSession.id);
+  }
+
+  return items;
+}
+
 function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   const previousType = currentSession.type;
   const nextType = incomingData.type;
@@ -421,6 +596,7 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     totalcrypto,
     wallet_address,
     amountString,
+    expiresAt,
     ...rest
   } = currentSession;
 
@@ -714,16 +890,24 @@ export default async function handler(
       updatedSession.wallet_address = payment.depositAddress;
       updatedSession.amountString = payment.fiatAmount;
       updatedSession.id = payment.reference;
+      updatedSession.expiresAt = payment.expiresAt;
       updatedSession.verifier = true;
     } 
 
 
     if (updatedSession.isReadyForPayment && !updatedSession.verifier) {
      if (updatedSession.type === "transfer") {
+        const paymentEstimate = await buildAiPaymentEstimate(
+          updatedSession.Amount,
+          updatedSession.estimation,
+          updatedSession.crypto,
+        );
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: Number(updatedSession.Amount),
+          fiatAmount: paymentEstimate.fiatAmount,
           fiatCurrency: "NGN",
+          estimateAmount: paymentEstimate.estimateAmount,
+          estimateAsset: paymentEstimate.estimateAsset,
           crypto: updatedSession.crypto,
           network: updatedSession.network,
           payer: {
@@ -740,12 +924,20 @@ export default async function handler(
         updatedSession.wallet_address = payment.depositAddress;
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
+        updatedSession.expiresAt = payment.expiresAt;
         updatedSession.verifier = true;
       } else if (updatedSession.type === "gift" && !updatedSession.claimGiftMode) {
+        const paymentEstimate = await buildAiPaymentEstimate(
+          updatedSession.Amount,
+          updatedSession.estimation,
+          updatedSession.crypto,
+        );
         const user: CreatePaymentInput = {
           type: "gift",
-          fiatAmount: Number(updatedSession.Amount),
+          fiatAmount: paymentEstimate.fiatAmount,
           fiatCurrency: "NGN",
+          estimateAmount: paymentEstimate.estimateAmount,
+          estimateAsset: paymentEstimate.estimateAsset,
           crypto: updatedSession.crypto,
           network: updatedSession.network,
           payer: {
@@ -758,6 +950,7 @@ export default async function handler(
         updatedSession.wallet_address = payment.depositAddress;
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
+        updatedSession.expiresAt = payment.expiresAt;
         updatedSession.verifier = true;
       } else if (updatedSession.type === "request") {
         const user: CreatePaymentInput = {
@@ -831,6 +1024,7 @@ export default async function handler(
     }
 
     const prompt = await chatPrompt(updatedSession);
+    const copyableItems = getCopyableItemsFromSession(updatedSession);
     if (updatedSession.verifier) {
       updatedSession = {};
       session[chatId] = {};
@@ -851,6 +1045,7 @@ export default async function handler(
     console.log("userHistories", userHistories);
     res.status(200).json({
       reply: response,
+      copyableItems,
     });
   } catch (err: unknown) {
     console.error("Error in /api/openai:", err);

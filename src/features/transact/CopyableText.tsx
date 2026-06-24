@@ -14,13 +14,21 @@ import { useStatusStore } from "stores/statusStore";
 
 const TERMINAL_STATUSES = ["settled", "failed", "settlement_reversed"];
 
+function toTimeMs(value?: Date | string | number | null): number | undefined {
+  if (!value) return undefined;
+
+  const timeMs = value instanceof Date ? value.getTime() : new Date(value).getTime();
+
+  return Number.isFinite(timeMs) ? timeMs : undefined;
+}
+
 export const CopyableText: React.FC<{
   text: string;
   label: string;
   reference?: string;
   isWallet?: boolean;
   paymentType?: string;
-  lastAssignedTime?: Date;
+  lastAssignedTime?: Date | string | number;
 }> = ({
   text,
   label,
@@ -51,8 +59,8 @@ export const CopyableText: React.FC<{
     statusRecord?.type?.toLowerCase() === "gift";
   const effectiveAssignedTimeMs =
     statusRecord?.expiresAt && isWallet
-      ? new Date(statusRecord.expiresAt).getTime()
-      : lastAssignedTime?.getTime();
+      ? toTimeMs(statusRecord.expiresAt)
+      : toTimeMs(lastAssignedTime);
   const effectiveAssignedTime =
     typeof effectiveAssignedTimeMs === "number"
       ? new Date(effectiveAssignedTimeMs)
