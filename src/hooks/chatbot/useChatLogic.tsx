@@ -73,8 +73,8 @@ export const useChatLogic = ({
       } else {
         console.log("Current Step:", currentStep);
 
-      //  await handleAiChat(chatInput)
-       await stepHandlers[currentStep.stepId as StepId](chatInput);
+        await handleAiChat(chatInput)
+     //  await stepHandlers[currentStep.stepId as StepId](chatInput);
       }
     } catch (error) {
       console.error(error);

@@ -1,6 +1,8 @@
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 
 
+// 11. if user say YES. ask the user what name will you like to save the beneficiary with? and if NO end the conversation
+// 12. After you collect the beneficiary name, let the user know you have the beneficiary
 
 export async function chatPrompt(updatedSession: Record<string, any>) {
   const prompt = ChatPromptTemplate.fromMessages([
@@ -52,16 +54,13 @@ IMPORTANT VALIDATION RULES:
 4. Amount
 5. Bank name
 6. Account number
-7. ask if the account details is correctly which are:
+7. ask if the account details is correctly which are: (DO NOT SKIP THIS PART!!!!  )
 Name: ${updatedSession.receiver_name} 
 Bank name: ${updatedSession.bank_name} 
 Account number: ${updatedSession.acct_number}
-
 8.  phone number
-9. after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} and you will be receiving ₦${updatedSession["amountString"]} transact_id: ${updatedSession.id}.
+9. after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} = ₦${updatedSession["amountString"]} only to 2Settle wallet address to complete your transaction.
 10.this question should follow, would you like to save this person as beneficiary?
-11. if user say YES. ask the user what name will you like to save the beneficiary with? and if NO end the conversation
-12. After you collect the beneficiary name, let the user know you have the beneficiary
 
 THIS IS THE SECTION FOR CREATE GIFT, IF USER WANT TO CREATE
 if a user want to  send gift  to their friends, family or anybody
@@ -70,7 +69,7 @@ if a user want to  send gift  to their friends, family or anybody
 3. Estimation type: crypto, naira, or dollar
 4. Amount
 5. phone number
-6.after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} and recipient will be receiving ₦${updatedSession["amountString"]} Gift_id: ${updatedSession.id}.
+6.after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} and recipient will be receiving ₦${updatedSession["amountString"]}.
 
 THIS IS THE SECTION FOR CREATE REQUEST, IF USER WANT TO REQUEST FOR PAYMENT
 1.Enter the amount you want to request in Naira

@@ -2,9 +2,19 @@ import { apiURL } from "@/constants/constants";
 import axios from "axios";
 
 
- export interface GemResponseType{
-            reply: string
-        }
+export interface GemCopyableItem {
+  label: string;
+  text: string;
+  isWallet?: boolean;
+  reference?: string;
+  paymentType?: string;
+  expiresAt?: string | null;
+}
+
+export interface GemResponseType {
+  reply: string;
+  copyableItems?: GemCopyableItem[];
+}
 
 
 export const OpenAI = async (updatedMessages: any, sessionId: String): Promise<any> => {
@@ -36,5 +46,3 @@ export const geminiAi = async (updatedMessages: string | undefined, sessionId: S
     throw new Error("Failed to store user data");
   }
 };
-
-
