@@ -387,7 +387,7 @@ async function fetchAiRate(): Promise<number> {
   const response = await axios.get<{
     rate?: string | number;
     rateNumeric?: string | number;
-  }>(`${engineBase}/rate/all`);
+  }>(`${engineBase}/rate/all`, { timeout: 15000 });
 
   return parseRateValue(response.data.rateNumeric ?? response.data.rate);
 }
@@ -407,6 +407,7 @@ async function fetchAiCryptoPrice(cryptoAsset: string): Promise<number> {
       headers: {
         "X-CMC_PRO_API_KEY": process.env.COINMARKETCAP_API_KEY,
       },
+      timeout: 15000,
     },
   );
 
@@ -1129,5 +1130,15 @@ export default async function handler(
     });
   } catch (err: unknown) {
     console.error("Error in /api/openai:", err);
+
+    if (!res.headersSent) {
+      const error = err as any;
+      res.status(error?.response?.status ?? 500).json({
+        error:
+          error?.response?.data?.error ??
+          error?.message ??
+          "Something went wrong",
+      });
+    }
   }
 }

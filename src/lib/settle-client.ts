@@ -61,6 +61,7 @@ export async function engineGet<T>(
   const config: AxiosRequestConfig = {
     params,
     headers: buildAuthHeaders("GET", fullPath),
+    timeout: 15000,
   };
 
   const response = await axios.get<T>(`${BASE_URL}${enginePath}`, config);
@@ -78,6 +79,7 @@ export async function enginePost<T>(
   const headers = buildAuthHeaders("POST", fullPath, body);
   const response = await axios.post<T>(`${BASE_URL}${enginePath}`, body, {
     headers,
+    timeout: 15000,
   });
   return response.data;
 }
