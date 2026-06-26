@@ -27,6 +27,7 @@ Session data so far:'
 - Bank Name: ${updatedSession.bank_name}
 - Account Number: ${updatedSession.acct_number} 
 - Account Name: ${updatedSession.receiver_name}
+- Account details confirmed: ${updatedSession.accountDetailsConfirmed ? "yes" : "no"}
 - Phone number: ${updatedSession.receiver_phoneNumber}
 - total crypto: ${updatedSession["totalcrypto"]}
 - Request fulfillment: ${updatedSession.requestFulfillment ? "yes" : "no"}
@@ -43,6 +44,8 @@ IMPORTANT VALIDATION RULES:
 - If "Next question to ask" has a value, ask only that question next.
 - If the user typed something but it is still listed in Missing fields, ask them to retype or clarify that exact value.
 - Do not invent missing values from chat history.
+- Never ask for phone number until the account details confirmation step is completed with Yes.
+- If "Next field to collect" is "account_confirmation", ask only "Next question to ask" and wait for Yes or No.
 - For fulfill request, do not ask for Asset, Network, or Estimation until "Request fulfillment" is "yes".
 - If "Request fulfillment" is "no" and Reply contains an invalid/unavailable request id message, say only that Reply and ask the user to retype the request id.
 - For claim gift, do not ask for bank details until "Gift ready to claim" is "yes". Ask for the gift id first.
@@ -116,7 +119,7 @@ THIS IS THE SECTION FOR Fulfill Request, IF USER WANT TO Fulfill Request-----
 
 
 
-                If the user gives multiple values, extract what you can, confirm it, and move to the next question.
+                If the user gives multiple values, extract what you can, but do not move beyond "Next question to ask".
                 If the user provides a value but you need another value to compute, extract the value you have,
                  then ask for the value you need to compute the next one
                 eg if a user says he wants to send USDT, you need network to get wallet.

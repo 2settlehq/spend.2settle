@@ -53,6 +53,7 @@ const FIELD_QUESTIONS: Record<string, string> = {
   bank_name: "What bank should receive the payment?",
   acct_number: "Please enter the 10-digit account number.",
   receiver_name: "Please confirm the bank name and account number so I can verify the account name.",
+  account_confirmation: "Please confirm if the resolved account details are correct. Reply Yes or No.",
   receiver_phoneNumber: "Please enter the recipient phone number.",
   id: "Please enter the gift id.",
 };
@@ -348,13 +349,45 @@ function parseRateValue(value: unknown): number {
   return rate;
 }
 
+function getAccountConfirmationQuestion(updatedSession: Sess) {
+  return `Please confirm if these account details are correct: **Name:** ${updatedSession.receiver_name} **Bank:** ${updatedSession.bank_name} **Account Number:** ${updatedSession.acct_number} Are these details correct? (Yes/No)`;
+}
+
+function getAccountConfirmationResponse(messageText: string) {
+  const normalized = messageText.trim().toLowerCase();
+
+  if (/^(yes|y|yeah|yep|correct|sure|ok|okay|confirm|confirmed|true)\b/i.test(normalized)) {
+    return true;
+  }
+
+  if (/^(no|n|nope|incorrect|wrong|not correct|false)\b/i.test(normalized)) {
+    return false;
+  }
+
+  return null;
+}
+
+function requiresAccountConfirmation(updatedSession: Sess) {
+  const type = (updatedSession.type || "transfer") as PaymentType;
+  const isRequestFulfillment =
+    type === "request" && updatedSession.requestFulfillment === true;
+  const isClaimGift =
+    type === "gift" && updatedSession.claimGiftMode === true;
+
+  return (
+    type === "transfer" ||
+    isClaimGift ||
+    (type === "request" && !isRequestFulfillment)
+  );
+}
+
 async function fetchAiRate(): Promise<number> {
   const engineBase =
     process.env.NEXT_PUBLIC_SETTLE_API_URL ?? "http://localhost:3500/v1";
   const response = await axios.get<{
     rate?: string | number;
     rateNumeric?: string | number;
-  }>(`${engineBase}/rate/all`);
+  }>(`${engineBase}/rate/all`, { timeout: 15000 });
 
   return parseRateValue(response.data.rateNumeric ?? response.data.rate);
 }
@@ -374,6 +407,7 @@ async function fetchAiCryptoPrice(cryptoAsset: string): Promise<number> {
       headers: {
         "X-CMC_PRO_API_KEY": process.env.COINMARKETCAP_API_KEY,
       },
+      timeout: 15000,
     },
   );
 
@@ -471,11 +505,7 @@ function getMissingFields(updatedSession: Sess) {
     missing.push("Amount");
   }
 
-  if (
-    type === "transfer" ||
-    isClaimGift ||
-    (type === "request" && !isRequestFulfillment)
-  ) {
+  if (requiresAccountConfirmation(updatedSession)) {
     if (!updatedSession.bank_name) {
       missing.push("bank_name");
     }
@@ -490,6 +520,15 @@ function getMissingFields(updatedSession: Sess) {
       !updatedSession.receiver_name
     ) {
       missing.push("receiver_name");
+    }
+
+    if (
+      updatedSession.bank_name &&
+      /^\d{10}$/.test(String(updatedSession.acct_number ?? "")) &&
+      updatedSession.receiver_name &&
+      updatedSession.accountDetailsConfirmed !== true
+    ) {
+      missing.push("account_confirmation");
     }
   }
 
@@ -510,7 +549,12 @@ function applyConversationState(updatedSession: Sess) {
 
   updatedSession.missingFields = missingFields;
   updatedSession.nextField = nextField;
-  updatedSession.nextQuestion = nextField ? FIELD_QUESTIONS[nextField] : "";
+  updatedSession.nextQuestion =
+    nextField === "account_confirmation"
+      ? getAccountConfirmationQuestion(updatedSession)
+      : nextField
+        ? FIELD_QUESTIONS[nextField]
+        : "";
   updatedSession.isReadyForPayment = missingFields.length === 0;
 
   return updatedSession;
@@ -592,6 +636,7 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     requestFulfillment,
     claimGiftMode,
     giftReadyToClaim,
+    accountDetailsConfirmed,
     id,
     totalcrypto,
     wallet_address,
@@ -704,7 +749,36 @@ export default async function handler(
       filtered.claimGiftMode = true;
     }
 
+    const previousSession = session[chatId];
+    const accountConfirmationResponse =
+      previousSession?.nextField === "account_confirmation"
+        ? getAccountConfirmationResponse(messageText)
+        : null;
+
+    if (accountConfirmationResponse === true) {
+      filtered.accountDetailsConfirmed = true;
+    } else if (accountConfirmationResponse === false) {
+      filtered.accountDetailsConfirmed = false;
+      filtered.bank_name = "";
+      filtered.acct_number = "";
+      filtered.receiver_name = "";
+      filtered.bankcode = "";
+      filtered.receiver_phoneNumber = "";
+    }
+
     const baseSession = resetSessionForFlowChange(session[chatId], filtered);
+    const accountDetailsChanged =
+      (filtered.bank_name &&
+        filtered.bank_name !== baseSession.bank_name) ||
+      (filtered.acct_number &&
+        filtered.acct_number !== baseSession.acct_number);
+
+    if (accountDetailsChanged) {
+      baseSession.receiver_name = "";
+      baseSession.bankcode = "";
+      baseSession.accountDetailsConfirmed = false;
+    }
+
     let updatedSession = { ...baseSession, ...filtered };
 
     console.log("Updatedddd session:", updatedSession);
@@ -765,6 +839,13 @@ export default async function handler(
       userAcctDetail[chatId]["bank_name"] = updatedSession.bank_name;
       userAcctDetail[chatId]["acct_number"] = updatedSession.acct_number;
       userAcctDetail[chatId]["receiver_name"] = updatedSession.receiver_name;
+    }
+
+    if (
+      requiresAccountConfirmation(updatedSession) &&
+      updatedSession.accountDetailsConfirmed !== true
+    ) {
+      updatedSession.receiver_phoneNumber = "";
     }
 
     if (
@@ -1049,5 +1130,15 @@ export default async function handler(
     });
   } catch (err: unknown) {
     console.error("Error in /api/openai:", err);
+
+    if (!res.headersSent) {
+      const error = err as any;
+      res.status(error?.response?.status ?? 500).json({
+        error:
+          error?.response?.data?.error ??
+          error?.message ??
+          "Something went wrong",
+      });
+    }
   }
 }
