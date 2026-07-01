@@ -100,6 +100,17 @@ const mergeCopyableItems = (
 
 export const handleAiChat = async (chatInput?: string) => {
   const { addMessages } = useChatStore.getState();
+  const getErrorMessage = (error: any) => {
+    const message =
+      error?.response?.data?.error ??
+      error?.response?.data?.message ??
+      error?.message ??
+      "Sorry, something went wrong while processing your request. Please try again in a moment.";
+    const code = error?.response?.data?.code;
+
+    return code ? `${message} (${code})` : message;
+  };
+
   try {
     console.log("we are at the start");
 
@@ -197,16 +208,11 @@ export const handleAiChat = async (chatInput?: string) => {
     addMessages?.(incomingMessages);
   } catch (err) {
     console.error("There was an error from backend", err);
+    const errorMessage = getErrorMessage(err);
     addMessages?.([
       {
         type: "incoming",
-        content: (
-          <span>
-            😓 Sorry, something went wrong while processing your request.
-            <br />
-            Please try again in a moment.
-          </span>
-        ),
+        content: <span>{errorMessage}</span>,
         timestamp: new Date(),
       },
     ]);

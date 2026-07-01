@@ -27,7 +27,7 @@ export const OpenAI = async (updatedMessages: any, sessionId: String): Promise<a
     return response.data;
   } catch (error) {
     console.error("Error storing user data:", error);
-    throw new Error("Failed to store user data");
+    throw error;
   }
 };
 
@@ -43,6 +43,6 @@ export const geminiAi = async (updatedMessages: string | undefined, sessionId: S
     return response.data;
   } catch (error) {
     console.error("Error storing user data:", error);
-    throw new Error("Failed to store user data");
+    throw error;
   }
 };

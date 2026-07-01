@@ -15,6 +15,20 @@ export function mapNetwork(network: string): string {
   return NETWORK_MAP[network.toLowerCase()] ?? network.toLowerCase();
 }
 
+function mapCrypto(crypto: string): string {
+  const normalized = crypto.toUpperCase();
+  return normalized === "TRON" ? "TRX" : normalized;
+}
+
+function mapPaymentNetwork(crypto: string | undefined, network: string): string {
+  const normalizedCrypto = crypto ? mapCrypto(crypto) : "";
+
+  if (normalizedCrypto === "BNB") return "bsc";
+  if (normalizedCrypto === "TRX") return "tron";
+
+  return mapNetwork(network);
+}
+
 export interface EnginePayment {
   reference: string;
   type: string;
@@ -29,10 +43,9 @@ export interface EnginePayment {
 
 interface CreatePaymentInput {
   type: "transfer" | "gift" | "request";
-  fiatAmount: number;
+  fiatAmount?: number;
+  cryptoAmount?: number;
   fiatCurrency?: string;
-  estimateAmount?: number;
-  estimateAsset?: string;
   crypto?: string;
   network?: string;
   chargeFrom?: "fiat" | "crypto";
@@ -51,27 +64,49 @@ interface ClaimGiftInput {
   accountNumber: string;
 }
 
+export function getEnginePaymentErrorMessage(error: any): string {
+  const message =
+    error?.response?.data?.error ??
+    error?.response?.data?.message ??
+    error?.message ??
+    "Failed to create payment. Please try again.";
+  const code = error?.response?.data?.code;
+
+  return code ? `${message} (${code})` : message;
+}
+
 export async function createEnginePayment(input: CreatePaymentInput): Promise<EnginePayment> {
   const body: Record<string, unknown> = {
     type: input.type,
-    fiatAmount: input.fiatAmount,
     fiatCurrency: input.fiatCurrency ?? "NGN",
   };
 
-  if (input.crypto) body.crypto = input.crypto;
-  if (input.network) body.network = mapNetwork(input.network);
-  if (typeof input.estimateAmount === "number") body.estimateAmount = input.estimateAmount;
-  if (input.estimateAsset) body.estimateAsset = input.estimateAsset;
+  if (input.fiatAmount !== undefined) body.fiatAmount = input.fiatAmount;
+  if (input.cryptoAmount !== undefined) body.cryptoAmount = input.cryptoAmount;
+  if (input.crypto) body.crypto = mapCrypto(input.crypto);
+  if (input.network) body.network = mapPaymentNetwork(input.crypto, input.network);
   if (input.chargeFrom) body.chargeFrom = input.chargeFrom;
   if (input.payer) body.payer = input.payer;
   if (input.receiver) body.receiver = input.receiver;
 
-  const response = await api.post<{ success: boolean; payment: EnginePayment }>(
-    "/api/payments",
-    body
-  );
+  try {
+    const response = await api.post<{ success: boolean; payment: EnginePayment }>(
+      "/api/payments",
+      body,
+      { timeout: 45000 }
+    );
 
-  return response.data.payment;
+    return response.data.payment;
+  } catch (error: any) {
+    console.error("Create engine payment failed:", {
+      requestBody: body,
+      message: error?.message,
+      code: error?.code,
+      response: error?.response?.data,
+      status: error?.response?.status,
+    });
+    throw error;
+  }
 }
 
 export async function fulfillRequest(
@@ -81,8 +116,8 @@ export async function fulfillRequest(
   const response = await api.post<{ success: boolean; payment: EnginePayment }>(
     `/api/payments/requests/${reference}/fulfill`,
     {
-      crypto: input.crypto,
-      network: mapNetwork(input.network),
+      crypto: mapCrypto(input.crypto),
+      network: mapPaymentNetwork(input.crypto, input.network),
       payer: input.payer,
     }
   );
@@ -120,8 +155,8 @@ export async function createManualPayment(input: ManualPaymentInput): Promise<En
       autoSettle: true,
       fiatAmount: input.fiatAmount,
       fiatCurrency: "NGN",
-      crypto: input.crypto,
-      network: input.network,
+      crypto: mapCrypto(input.crypto),
+      network: mapPaymentNetwork(input.crypto, input.network),
       cryptoAmount: input.cryptoAmount,
       txHash: input.txHash,
       settlementReference: input.settlementReference,

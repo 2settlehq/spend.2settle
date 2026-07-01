@@ -65,10 +65,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error: any) {
     console.error(
       "Payment creation error:",
-      JSON.stringify(error?.response?.data ?? error, null, 2),
+      JSON.stringify(
+        {
+          message: error?.message,
+          code: error?.code,
+          response: error?.response?.data,
+          status: error?.response?.status,
+        },
+        null,
+        2,
+      ),
     );
     return res.status(error?.response?.status ?? 500).json(
-      error?.response?.data ?? { error: "Failed to create payment" }
+      error?.response?.data ?? { error: error?.message ?? "Failed to create payment" }
     );
   }
 }

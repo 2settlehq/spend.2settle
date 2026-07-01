@@ -168,7 +168,10 @@ export default function CryptoTransactionForm() {
         cryptoAmount: parseFloat(formData.cryptoSent),
         walletAddress: formData.walletAddress as string,
         payer: { phone: formData.customerNumber },
-        receiver: { bankCode: formData.bankCode, accountNumber: formData.accountNumber },
+        receiver: {
+          bankCode: formData.bankCode,
+          accountNumber: formData.accountNumber,
+        },
       });
 
       toast({

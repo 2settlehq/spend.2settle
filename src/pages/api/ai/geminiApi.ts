@@ -60,10 +60,9 @@ const FIELD_QUESTIONS: Record<string, string> = {
 
 interface CreatePaymentInput {
   type: "transfer" | "gift" | "request";
-  fiatAmount: number;
+  fiatAmount?: number;
+  cryptoAmount?: number;
   fiatCurrency?: string;
-  estimateAmount?: number;
-  estimateAsset?: string;
   crypto?: string;
   network?: string;
   chargeFrom?: "fiat" | "crypto";
@@ -74,7 +73,8 @@ interface CreatePaymentInput {
 type AiEstimateAsset = "naira" | "dollar" | "crypto";
 
 type AiPaymentEstimate = {
-  fiatAmount: number;
+  fiatAmount?: number;
+  cryptoAmount?: number;
   estimateAmount: number;
   estimateAsset: AiEstimateAsset;
 };
@@ -392,38 +392,9 @@ async function fetchAiRate(): Promise<number> {
   return parseRateValue(response.data.rateNumeric ?? response.data.rate);
 }
 
-async function fetchAiCryptoPrice(cryptoAsset: string): Promise<number> {
-  const normalizedSymbol = cryptoAsset.toUpperCase();
-  const symbol = normalizedSymbol === "TRON" ? "TRX" : normalizedSymbol;
-
-  if (symbol === "USDT") {
-    return 1;
-  }
-
-  const response = await axios.get(
-    "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest",
-    {
-      params: { symbol },
-      headers: {
-        "X-CMC_PRO_API_KEY": process.env.COINMARKETCAP_API_KEY,
-      },
-      timeout: 15000,
-    },
-  );
-
-  const price = Number(response.data.data[symbol].quote.USD.price);
-
-  if (!Number.isFinite(price) || price <= 0) {
-    throw new Error(`Invalid ${symbol} price received`);
-  }
-
-  return price;
-}
-
 async function buildAiPaymentEstimate(
   amountValue: unknown,
   estimateAssetValue: unknown,
-  cryptoAsset: string,
 ): Promise<AiPaymentEstimate> {
   const estimateAmount = Number(amountValue);
 
@@ -441,9 +412,9 @@ async function buildAiPaymentEstimate(
     };
   }
 
-  const rate = await fetchAiRate();
-
   if (estimateAsset === "dollar") {
+    const rate = await fetchAiRate();
+
     return {
       fiatAmount: estimateAmount * rate,
       estimateAmount,
@@ -451,13 +422,39 @@ async function buildAiPaymentEstimate(
     };
   }
 
-  const assetPrice = await fetchAiCryptoPrice(cryptoAsset);
-
   return {
-    fiatAmount: estimateAmount * assetPrice * rate,
+    cryptoAmount: estimateAmount,
     estimateAmount,
     estimateAsset,
   };
+}
+
+function buildEngineAmountFields(
+  paymentEstimate: AiPaymentEstimate,
+): Pick<CreatePaymentInput, "fiatAmount" | "cryptoAmount" | "chargeFrom"> {
+  if (paymentEstimate.estimateAsset === "crypto") {
+    return {
+      cryptoAmount: paymentEstimate.cryptoAmount ?? paymentEstimate.estimateAmount,
+      chargeFrom: "fiat",
+    };
+  }
+
+  if (paymentEstimate.fiatAmount === undefined) {
+    throw new Error("Fiat amount could not be calculated");
+  }
+
+  return {
+    fiatAmount: paymentEstimate.fiatAmount,
+    chargeFrom: "crypto",
+  };
+}
+
+function requireFiatAmount(paymentEstimate: AiPaymentEstimate): number {
+  if (paymentEstimate.fiatAmount === undefined) {
+    throw new Error("Requests must be estimated in naira or dollar");
+  }
+
+  return paymentEstimate.fiatAmount;
 }
 
 function getMissingFields(updatedSession: Sess) {
@@ -981,14 +978,11 @@ export default async function handler(
         const paymentEstimate = await buildAiPaymentEstimate(
           updatedSession.Amount,
           updatedSession.estimation,
-          updatedSession.crypto,
         );
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: paymentEstimate.fiatAmount,
+          ...buildEngineAmountFields(paymentEstimate),
           fiatCurrency: "NGN",
-          estimateAmount: paymentEstimate.estimateAmount,
-          estimateAsset: paymentEstimate.estimateAsset,
           crypto: updatedSession.crypto,
           network: updatedSession.network,
           payer: {
@@ -1011,14 +1005,11 @@ export default async function handler(
         const paymentEstimate = await buildAiPaymentEstimate(
           updatedSession.Amount,
           updatedSession.estimation,
-          updatedSession.crypto,
         );
         const user: CreatePaymentInput = {
           type: "gift",
-          fiatAmount: paymentEstimate.fiatAmount,
+          ...buildEngineAmountFields(paymentEstimate),
           fiatCurrency: "NGN",
-          estimateAmount: paymentEstimate.estimateAmount,
-          estimateAsset: paymentEstimate.estimateAsset,
           crypto: updatedSession.crypto,
           network: updatedSession.network,
           payer: {
@@ -1034,9 +1025,14 @@ export default async function handler(
         updatedSession.expiresAt = payment.expiresAt;
         updatedSession.verifier = true;
       } else if (updatedSession.type === "request") {
+        const paymentEstimate = await buildAiPaymentEstimate(
+          updatedSession.Amount,
+          updatedSession.estimation,
+        );
         const user: CreatePaymentInput = {
           type: "request",
-          fiatAmount: Number(updatedSession.Amount),
+          fiatAmount: requireFiatAmount(paymentEstimate),
+          fiatCurrency: "NGN",
           payer: {
             chatId: chatId,
           },
@@ -1129,10 +1125,14 @@ export default async function handler(
       copyableItems,
     });
   } catch (err: unknown) {
-    console.error("Error in /api/openai:", err);
+    const error = err as any;
+    console.error("Error in /api/ai/geminiApi:", {
+      message: error?.message,
+      response: error?.response?.data,
+      status: error?.response?.status,
+    });
 
     if (!res.headersSent) {
-      const error = err as any;
       res.status(error?.response?.status ?? 500).json({
         error:
           error?.response?.data?.error ??
