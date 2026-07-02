@@ -5,6 +5,7 @@ import {
   verifyReceiver,
   createEnginePayment,
   fulfillRequest,
+  getEnginePaymentErrorMessage,
   mapNetwork,
 } from "@/services/enginePaymentService";
 import { resetAllTransactionState } from "@/utils/resetTransactionState";
@@ -17,7 +18,7 @@ import { useUserStore } from "stores/userStore";
 
 export async function processTransaction() {
   const currentStep = useChatStore.getState().currentStep;
-  const { next } = useChatStore.getState();
+  const { addMessages, next } = useChatStore.getState();
   const { paymentMode } = usePaymentStore.getState();
 
   const paymentStore = usePaymentStore.getState();
@@ -33,9 +34,23 @@ export async function processTransaction() {
   }
 
   const fiatAmount = parseFloat(cleanCurrency(paymentStore.paymentNairaEstimate)) || 0;
-  const estimateAmount =
-    parseFloat(cleanCurrency(paymentStore.amountPayable)) || fiatAmount;
-  const estimateAsset = paymentStore.estimateAsset || "Naira";
+  const cryptoAmount =
+    parseFloat(cleanCurrency(paymentStore.amountPayable || paymentStore.paymentAssetEstimate)) || 0;
+  const estimateAsset = (paymentStore.estimateAsset || "naira").toLowerCase();
+  const isCryptoEstimate =
+    estimateAsset !== "naira" && estimateAsset !== "dollar" && estimateAsset !== "usdt";
+  const paymentAmountFields = isCryptoEstimate
+    ? { cryptoAmount, chargeFrom: "fiat" as const }
+    : { fiatAmount, chargeFrom: paymentStore.chargeFrom };
+  const displayPaymentError = (error: unknown) => {
+    addMessages([
+      {
+        type: "incoming",
+        content: <span>{getEnginePaymentErrorMessage(error)}</span>,
+        timestamp: new Date(),
+      },
+    ]);
+  };
   const payer = {
     chatId: user?.chatId?.toString() ?? "",
     phone: user?.phone ?? undefined,
@@ -65,12 +80,10 @@ export async function processTransaction() {
     try {
       const payment = await createEnginePayment({
         type: "transfer",
-        fiatAmount,
-        estimateAmount,
-        estimateAsset,
+        ...paymentAmountFields,
+        fiatCurrency: "NGN",
         crypto: paymentStore.crypto,
         network: paymentStore.network,
-        chargeFrom: paymentStore.chargeFrom,
         payer,
         receiver: { bankCode, accountNumber: acct_number },
       });
@@ -92,18 +105,17 @@ export async function processTransaction() {
       displaySendPayment();
     } catch (error) {
       console.error("Error creating transfer:", error);
+      displayPaymentError(error);
     }
 
   } else if (isGift) {
     try {
       const payment = await createEnginePayment({
         type: "gift",
-        fiatAmount,
-        estimateAmount,
-        estimateAsset,
+        ...paymentAmountFields,
+        fiatCurrency: "NGN",
         crypto: paymentStore.crypto,
         network: paymentStore.network,
-        chargeFrom: paymentStore.chargeFrom,
         payer,
       });
 
@@ -124,6 +136,7 @@ export async function processTransaction() {
       displaySendPayment();
     } catch (error) {
       console.error("Error creating gift:", error);
+      displayPaymentError(error);
     }
 
   } else if (isRequest) {
@@ -131,8 +144,7 @@ export async function processTransaction() {
       const payment = await createEnginePayment({
         type: "request",
         fiatAmount,
-        estimateAmount,
-        estimateAsset,
+        fiatCurrency: "NGN",
         receiver: { bankCode, accountNumber: acct_number },
       });
 
@@ -145,6 +157,7 @@ export async function processTransaction() {
       displaySendPayment();
     } catch (error) {
       console.error("Error creating request:", error);
+      displayPaymentError(error);
     }
 
   } else if (isClaimGift) {
@@ -189,6 +202,7 @@ export async function processTransaction() {
       displaySendPayment();
     } catch (error) {
       console.error("Error fulfilling request:", error);
+      displayPaymentError(error);
     }
   }
 }
