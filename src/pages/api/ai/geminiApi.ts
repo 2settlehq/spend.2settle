@@ -123,6 +123,14 @@ declare global {
 const userAcctDetail: Sess =
   global.__USERACCTDETAIL__ ?? (global.__USERACCTDETAIL__ = {});
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __LAST_TERMINAL_FLOW__: Sess | undefined;
+}
+
+const lastTerminalFlow: Sess =
+  global.__LAST_TERMINAL_FLOW__ ?? (global.__LAST_TERMINAL_FLOW__ = {});
+
 // 🧠 Keep userHistories persistent across API calls in Next.js
 
 declare global {
@@ -376,7 +384,7 @@ function requiresAccountConfirmation(updatedSession: Sess) {
 
   return (
     type === "transfer" ||
-    isClaimGift ||
+    (isClaimGift && updatedSession.giftReadyToClaim === true) ||
     (type === "request" && !isRequestFulfillment)
   );
 }
@@ -682,6 +690,81 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   return rest;
 }
 
+function isNewClaimGiftId(currentSession: Sess, incomingData: Sess) {
+  return (
+    currentSession.type === "gift" &&
+    currentSession.claimGiftMode === true &&
+    incomingData.id &&
+    incomingData.id !== currentSession.id
+  );
+}
+
+function resetClaimGiftForNewId(currentSession: Sess) {
+  const {
+    missingFields,
+    nextField,
+    nextQuestion,
+    isReadyForPayment,
+    verifier,
+    reply,
+    giftReadyToClaim,
+    Amount,
+    bank_name,
+    acct_number,
+    receiver_name,
+    bankcode,
+    accountDetailsConfirmed,
+    receiver_phoneNumber,
+    ...rest
+  } = currentSession;
+
+  return rest;
+}
+
+async function checkGiftIdForClaim(giftId: string) {
+  const updatedSession: Sess = {
+    type: "gift",
+    claimGiftMode: true,
+    id: giftId,
+  };
+
+  try {
+    console.log("checking gift id before claim.......");
+    const result = await engineGet<PaymentResponse>(`/payments/${giftId}`);
+    const status = result.payment.status?.toLowerCase();
+
+    if (result.payment.type !== "gift") {
+      updatedSession.reply = `this gift id is not available ${giftId}`;
+      updatedSession.verifier = true;
+    } else if (status === "confirmed" || status === "pending_claim") {
+      updatedSession.giftReadyToClaim = true;
+      updatedSession.verifier = false;
+      updatedSession.Amount = String(result.payment.fiatAmount);
+      updatedSession.reply = `Gift ${giftId} is confirmed. Please provide your bank name so you can claim it.`;
+    } else if (status === "settled" || status === "settling") {
+      updatedSession.reply = "This gift has already been claimed.";
+      updatedSession.verifier = true;
+    } else if (
+      status === "created" ||
+      status === "pending" ||
+      status === "confirming" ||
+      status === "awaiting_payment"
+    ) {
+      updatedSession.reply = `this gift is still ${result.payment.status}, try again later `;
+      updatedSession.verifier = true;
+    } else {
+      updatedSession.reply = `this gift id is not available ${giftId}`;
+      updatedSession.verifier = true;
+    }
+  } catch (error: any) {
+    console.error("Check gift error:", error?.response?.data ?? error);
+    updatedSession.reply = `this gift id does not exist ${giftId}`;
+    updatedSession.verifier = true;
+  }
+
+  return applyConversationState(updatedSession);
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -717,6 +800,36 @@ export default async function handler(
     // Add user message to history
     const history = userHistories.get(chatId);
     history.push(new HumanMessage(messageText));
+    const giftIdInMessage =
+      messageText.toUpperCase().match(/\b2S-[A-Z0-9]{6}\b/)?.[0] ?? "";
+    const activeRequestIdCollection =
+      session[chatId]?.type === "request" &&
+      session[chatId]?.requestFulfillment !== true;
+
+    if (giftIdInMessage && !activeRequestIdCollection) {
+      let updatedSession = await checkGiftIdForClaim(giftIdInMessage);
+      const response = String(updatedSession.reply);
+      const copyableItems = getCopyableItemsFromSession(updatedSession);
+
+      if (updatedSession.verifier === true) {
+        lastTerminalFlow[chatId] = {
+          type: updatedSession.type,
+          claimGiftMode: updatedSession.claimGiftMode,
+          requestFulfillment: updatedSession.requestFulfillment,
+        };
+        updatedSession = {};
+        session[chatId] = {};
+        userHistories.set(chatId, []);
+      } else {
+        session[chatId] = updatedSession;
+        history.push(new AIMessage(response));
+      }
+
+      return res.status(200).json({
+        reply: response,
+        copyableItems,
+      });
+    }
 
     // 🧩 Step 1: Extract intent + entity
     const intentData = normalizeExtractedData(
@@ -729,7 +842,6 @@ export default async function handler(
         ([_, value]) => value !== "" && value !== "null" && value !== null,
       ),
     );
-
     if (
       session[chatId]?.type === "request" &&
       session[chatId]?.requestFulfillment
@@ -737,11 +849,31 @@ export default async function handler(
       filtered.type = "request";
     }
 
+    const claimGiftMentioned = /\bclaim(?:ing)?\s+(?:a\s+)?gift\b/i.test(
+      messageText,
+    );
     const wantsToClaimGift =
-      /\bclaim(?:ing)?\s+(?:a\s+)?gift\b/i.test(messageText) ||
-      session[chatId]?.claimGiftMode === true;
+      claimGiftMentioned ||
+      session[chatId]?.claimGiftMode === true ||
+      (giftIdInMessage &&
+        !activeRequestIdCollection &&
+        lastTerminalFlow[chatId]?.type === "gift" &&
+        lastTerminalFlow[chatId]?.claimGiftMode === true);
 
     if (wantsToClaimGift) {
+      filtered.type = "gift";
+      filtered.claimGiftMode = true;
+    }
+
+    const shouldForceGiftIdCheck =
+      Boolean(giftIdInMessage) &&
+      !activeRequestIdCollection &&
+      (wantsToClaimGift ||
+        (filtered.type === "gift" && filtered.claimGiftMode === true) ||
+        !session[chatId]?.type);
+
+    if (shouldForceGiftIdCheck) {
+      filtered.id = giftIdInMessage;
       filtered.type = "gift";
       filtered.claimGiftMode = true;
     }
@@ -763,7 +895,12 @@ export default async function handler(
       filtered.receiver_phoneNumber = "";
     }
 
-    const baseSession = resetSessionForFlowChange(session[chatId], filtered);
+    let baseSession = resetSessionForFlowChange(session[chatId], filtered);
+
+    if (shouldForceGiftIdCheck || isNewClaimGiftId(baseSession, filtered)) {
+      baseSession = resetClaimGiftForNewId(baseSession);
+    }
+
     const accountDetailsChanged =
       (filtered.bank_name &&
         filtered.bank_name !== baseSession.bank_name) ||
@@ -777,6 +914,7 @@ export default async function handler(
     }
 
     let updatedSession = { ...baseSession, ...filtered };
+    let shouldUseDirectReply = false;
 
     console.log("Updatedddd session:", updatedSession);
     if (updatedSession.crypto === "BTC") {
@@ -917,6 +1055,39 @@ export default async function handler(
         updatedSession.reply = `this gift id does not exist ${updatedSession.id}`;
         updatedSession.verifier = true;
       }
+      shouldUseDirectReply = Boolean(updatedSession.reply);
+    }
+
+    if (
+      shouldForceGiftIdCheck &&
+      updatedSession.type === "gift" &&
+      updatedSession.claimGiftMode &&
+      updatedSession.id &&
+      updatedSession.reply
+    ) {
+      updatedSession = applyConversationState(updatedSession);
+
+      const copyableItems = getCopyableItemsFromSession(updatedSession);
+      const response = String(updatedSession.reply);
+
+      if (updatedSession.verifier === true) {
+        lastTerminalFlow[chatId] = {
+          type: updatedSession.type,
+          claimGiftMode: updatedSession.claimGiftMode,
+          requestFulfillment: updatedSession.requestFulfillment,
+        };
+        updatedSession = {};
+        session[chatId] = {};
+        userHistories.set(chatId, []);
+      } else {
+        session[chatId] = updatedSession;
+        history.push(new AIMessage(response));
+      }
+
+      return res.status(200).json({
+        reply: response,
+        copyableItems,
+      });
     }
 
     updatedSession = applyConversationState(updatedSession);
@@ -928,6 +1099,7 @@ export default async function handler(
       updatedSession.id &&
       updatedSession.bankcode &&
       updatedSession.receiver_name &&
+      updatedSession.accountDetailsConfirmed === true &&
       /^\d{10}$/.test(String(updatedSession.acct_number ?? "")) &&
       !updatedSession.verifier
     ) {
@@ -947,6 +1119,7 @@ export default async function handler(
             : claimError ?? "Failed to claim gift";
       }
       updatedSession.verifier = true;
+      shouldUseDirectReply = Boolean(updatedSession.reply);
     }
 
     if (
@@ -1100,25 +1273,59 @@ export default async function handler(
       }
     }
 
-    const prompt = await chatPrompt(updatedSession);
     const copyableItems = getCopyableItemsFromSession(updatedSession);
-    if (updatedSession.verifier) {
+    const terminalConversation = updatedSession.verifier === true;
+    let directReply = "";
+
+    if (updatedSession.reply) {
+      if (terminalConversation) {
+        directReply = String(updatedSession.reply);
+      } else if (
+        updatedSession.type === "gift" &&
+        updatedSession.claimGiftMode === true &&
+        shouldUseDirectReply
+      ) {
+        directReply = String(updatedSession.reply);
+      }
+    }
+
+    const prompt = directReply ? null : await chatPrompt(updatedSession);
+
+    if (terminalConversation) {
+      lastTerminalFlow[chatId] = {
+        type: updatedSession.type,
+        claimGiftMode: updatedSession.claimGiftMode,
+        requestFulfillment: updatedSession.requestFulfillment,
+      };
       updatedSession = {};
       session[chatId] = {};
+    } else if (
+      updatedSession.type !== "gift" ||
+      updatedSession.claimGiftMode !== true
+    ) {
+      delete lastTerminalFlow[chatId];
     }
     // Get AI response
-    const parser = new StringOutputParser();
-    const chain = prompt.pipe(model).pipe(parser);
+    let response = directReply;
 
-    const response = await chain.invoke({
-      word: messageText,
-      chat_history: history,
-    });
+    if (!response && prompt) {
+      const parser = new StringOutputParser();
+      const chain = prompt.pipe(model).pipe(parser);
+
+      response = await chain.invoke({
+        word: messageText,
+        chat_history: history,
+      });
+    }
+
+    if (terminalConversation) {
+      userHistories.set(chatId, []);
+    } else {
+      history.push(new AIMessage(response));
+    }
 
     session[chatId] = updatedSession;
 
-    // Add AI response to history
-    history.push(new AIMessage(response));
     console.log("userHistories", userHistories);
     res.status(200).json({
       reply: response,
