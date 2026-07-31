@@ -14,6 +14,7 @@ export interface GemCopyableItem {
 export interface GemResponseType {
   reply: string;
   copyableItems?: GemCopyableItem[];
+  claimGiftMode?: boolean;
 }
 
 

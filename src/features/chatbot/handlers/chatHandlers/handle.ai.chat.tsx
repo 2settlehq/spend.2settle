@@ -17,8 +17,8 @@ const COPYABLE_REPLY_FIELDS: Array<{
   {
     label: "Wallet Address",
     patterns: [
-      /wallet\s*address\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9:_-]{5,})/i,
-      /wallet_address\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9:_-]{5,})/i,
+      /wallet\s*address\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9:._-]{5,})/i,
+      /wallet_address\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9:._-]{5,})/i,
     ],
   },
   {
@@ -27,13 +27,6 @@ const COPYABLE_REPLY_FIELDS: Array<{
       /transaction\s*id\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9_-]{5,})/i,
       /transaction_id\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9_-]{5,})/i,
       /transact_id\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9_-]{5,})/i,
-    ],
-  },
-  {
-    label: "Gift ID",
-    patterns: [
-      /gift\s*id\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9_-]{5,})/i,
-      /gift_id\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9_-]{5,})/i,
     ],
   },
   {
@@ -55,13 +48,21 @@ const COPYABLE_REPLY_FIELDS: Array<{
 const cleanCopyableValue = (value: string) =>
   value.replace(/^[`"'(<\[]+|[`"').,;:>\]]+$/g, "").trim();
 
+const normalizeReplyForCopyParsing = (reply = "") =>
+  reply
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/`/g, "")
+    .trim();
+
 const getCopyableReplyItems = (reply = ""): CopyableReplyItem[] => {
   const items: CopyableReplyItem[] = [];
   const seen = new Set<string>();
+  const normalizedReply = normalizeReplyForCopyParsing(reply);
 
   COPYABLE_REPLY_FIELDS.forEach(({ label, patterns }) => {
     for (const pattern of patterns) {
-      const match = reply.match(pattern);
+      const match = reply.match(pattern) ?? normalizedReply.match(pattern);
       const text = match?.[1] ? cleanCopyableValue(match[1]) : "";
 
       if (!text || ["undefined", "null", "none"].includes(text.toLowerCase())) {
@@ -83,12 +84,17 @@ const getCopyableReplyItems = (reply = ""): CopyableReplyItem[] => {
 const mergeCopyableItems = (
   structuredItems: CopyableReplyItem[] = [],
   fallbackItems: CopyableReplyItem[] = [],
+  options: { suppressGiftClaimIds?: boolean } = {},
 ) => {
   const seen = new Set<string>();
+  const suppressedLabels = new Set(
+    options.suppressGiftClaimIds ? ["transaction id", "gift id"] : [],
+  );
 
   return [...structuredItems, ...fallbackItems].filter((item) => {
     const text = item.text?.trim();
     if (!text) return false;
+    if (suppressedLabels.has(item.label.toLowerCase())) return false;
 
     const key = `${item.label}:${text}`;
     if (seen.has(key)) return false;
@@ -135,6 +141,7 @@ export const handleAiChat = async (chatInput?: string) => {
     const copyableItems = mergeCopyableItems(
       reply.copyableItems,
       getCopyableReplyItems(reply.reply),
+      { suppressGiftClaimIds: reply.claimGiftMode === true },
     );
     const shouldShowTransferTimeNotice = copyableItems.some(
       (item) => item.isWallet || item.label.toLowerCase() === "wallet address",
