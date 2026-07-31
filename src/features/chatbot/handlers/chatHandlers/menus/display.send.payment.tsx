@@ -23,8 +23,7 @@ export const displaySendPayment = async () => {
 
   const { currentStep, addMessages, next } = useChatStore.getState();
 
-  const { giftId, transferId, requestId, transactionId } =
-    useTransactionStore.getState();
+  const { transferId, requestId, transactionId } = useTransactionStore.getState();
 
   const paymentTicker = getBaseSymbol(ticker);
   const assetPayment = parseFloat(paymentAssetEstimate);
@@ -112,6 +111,11 @@ export const displaySendPayment = async () => {
             <br />
             Send the crypto to the 2Settle wallet address below to complete the payment.
           </span>
+        ) : isGift ? (
+          <span>
+            You are sending <b>{paymentAsset}</b> and recipient will be receiving{" "}
+            <b>{formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}</b>.
+          </span>
         ) : (
           <span>
             Note: You are sending{" "}
@@ -171,19 +175,6 @@ export const displaySendPayment = async () => {
         timestamp: new Date(),
       },
     );
-
-    if (isGift) {
-      messages.push({
-        type: "incoming",
-        intent: {
-          kind: "component",
-          name: "CopyableText",
-          props: { text: giftId, label: "Gift ID" },
-          persist: true,
-        },
-        timestamp: new Date(),
-      });
-    }
 
     if (isTransfer) {
       messages.push({

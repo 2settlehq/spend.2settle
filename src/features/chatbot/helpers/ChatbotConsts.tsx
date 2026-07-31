@@ -53,7 +53,31 @@ export const componentMap: { [key: string]: React.ComponentType<any> } = {
   // Add other components here as needed
 };
 
-export const greetings = ["hi", "hello", "hey", "howdy"];
+export const greetings = [
+  "hi",
+  "hello",
+  "hey",
+  "howdy",
+  "how far",
+  "good morning",
+  "good afternoon",
+  "good evening",
+  "yo",
+  "sup",
+];
+
+export const isGreeting = (input: string) => {
+  const normalized = input
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ");
+
+  return greetings.some(
+    (greeting) =>
+      normalized === greeting || normalized.startsWith(`${greeting} `),
+  );
+};
 
 
 export const initializeChatId = (
