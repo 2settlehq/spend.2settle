@@ -31,7 +31,6 @@ import { requestPayCard } from "@/features/chatbot/handlers/chatHandlers/request
 import { handleCryptoPayment } from "@/features/chatbot/handlers/chatHandlers/send.payment";
 import { handleTransactCrypto } from "@/features/chatbot/handlers/chatHandlers/transact.crypto";
 import { handleTransferMoney } from "@/features/chatbot/handlers/chatHandlers/transfer.money";
-import { greetings } from "@/features/chatbot/helpers/ChatbotConsts";
 
 import { Dispatch, SetStateAction } from "react";
 import useChatStore, { MessageType } from "stores/chatStore";
@@ -65,17 +64,9 @@ export const useChatLogic = ({
       ]);
       setChatInput("");
 
-      // greetings logic
-      if (greetings.includes(chatInput.trim().toLowerCase())) {
-        console.log("We are resetting to handle greeting...");
-        console.log("Current Step:", currentStep);
-        await stepHandlers["start"](chatInput);
-      } else {
-        console.log("Current Step:", currentStep);
-
-        await handleAiChat(chatInput)
-     //  await stepHandlers[currentStep.stepId as StepId](chatInput);
-      }
+      console.log("Current Step:", currentStep);
+      await handleAiChat(chatInput);
+      // await stepHandlers[currentStep.stepId as StepId](chatInput);
     } catch (error) {
       console.error(error);
       onError?.(error instanceof Error ? error : new Error("Unknown error"));

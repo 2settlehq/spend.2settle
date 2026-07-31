@@ -11,12 +11,9 @@ import { chatPrompt } from "../../../services/ai/ai-endpoint-service";
 import * as dotenv from "dotenv";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
-import axios from "axios";
 
 import crypto from "crypto";
-import {
-  createBeneficiary,
-} from "@/helpers/api_calls";
+import { createBeneficiary } from "@/helpers/api_calls";
 import { resolveBankAccount } from "@/services/bank/bank.service";
 
 import useRate from "@/hooks/rates/useRate";
@@ -26,42 +23,68 @@ import {
   createEnginePayment,
   fulfillRequest,
 } from "@/services/enginePaymentService";
-import { engineGet } from "@/lib/settle-client";
+import { engineGet, enginePost } from "@/lib/settle-client";
 import { chat } from "googleapis/build/src/apis/chat";
 // at top of the file (outside handler)
 type Sess = Record<string, any>;
-type PaymentType = "transfer" | "gift" | "request";
-type CopyableItem = {
-  label: string;
-  text: string;
-  isWallet?: boolean;
-  reference?: string;
-  paymentType?: string;
-  expiresAt?: string | null;
-};
+type PaymentType = "transfer" | "gift" | "request" | "report";
+type ComplaintType = "track_transaction" | "stolen_funds" | "fraud";
 
 const SUPPORTED_CRYPTO = new Set(["BTC", "ETH", "BNB", "TRON", "USDT"]);
 const SUPPORTED_USDT_NETWORKS = new Set(["ERC20", "TRC20", "BEP20"]);
 const SUPPORTED_ESTIMATIONS = new Set(["crypto", "naira", "dollar"]);
+const SUPPORTED_COMPLAINT_TYPES = new Set<ComplaintType>([
+  "track_transaction",
+  "stolen_funds",
+  "fraud",
+]);
+const CRYPTO_ALIASES: Array<[string, RegExp]> = [
+  ["BTC", /\b(?:btc|bitcoin|xbt)\b/i],
+  ["ETH", /\b(?:eth|ethereum|ether)\b/i],
+  ["BNB", /\b(?:bnb|binance\s+(?:coin|token)|binance)\b/i],
+  ["TRON", /\b(?:tron|trx)\b/i],
+  ["USDT", /\b(?:usdt|tether|tether\s+usd)\b/i],
+];
 
 const FIELD_QUESTIONS: Record<string, string> = {
-  type: "What would you like to do: send crypto, create a gift, or request payment?",
-  crypto: "Which crypto asset do you want to use? You can choose BTC, ETH, BNB, TRON, or USDT.",
+  type: "What would you like to do today: send crypto, create or claim a gift, or request payment?",
+  crypto:
+    "Which crypto asset do you want to use? You can choose BTC/Bitcoin, ETH/Ethereum, BNB/Binance token, TRON/TRX, or USDT/Tether.",
   network: "Which USDT network do you want to use: ERC20, TRC20, or BEP20?",
-  estimation: "How would you like to estimate the amount: crypto, naira, or dollar?",
+  estimation:
+    "How would you like to estimate the amount: crypto, naira, or dollar?",
   Amount: "Please enter the amount again.",
   bank_name: "What bank should receive the payment?",
   acct_number: "Please enter the 10-digit account number.",
-  receiver_name: "Please confirm the bank name and account number so I can verify the account name.",
-  account_confirmation: "Please confirm if the resolved account details are correct. Reply Yes or No.",
+  receiver_name:
+    "Please confirm the bank name and account number so I can verify the account name.",
   receiver_phoneNumber: "Please enter the recipient phone number.",
   id: "Please enter the gift id.",
+  complaintType:
+    "What type of report is this: stolen funds, fraud, or track transaction?",
+  reportName: "Please enter your full name for the report.",
+  reportPhoneNumber: "Please enter your phone number for the report.",
+  reportWalletAddress: "Please enter your wallet address.",
+  fraudsterWalletAddress:
+    "Please enter the fraudster wallet address, or type skip if you do not have it.",
+  reportDescription: "Please briefly describe what happened.",
 };
+
+const GREETING_TYPE_QUESTION = FIELD_QUESTIONS.type;
+
+interface ReportResponse {
+  success: boolean;
+  data: {
+    report: {
+      reportId: string;
+      status: string;
+    };
+  };
+}
 
 interface CreatePaymentInput {
   type: "transfer" | "gift" | "request";
-  fiatAmount?: number;
-  cryptoAmount?: number;
+  fiatAmount: number;
   fiatCurrency?: string;
   crypto?: string;
   network?: string;
@@ -69,15 +92,6 @@ interface CreatePaymentInput {
   payer?: { chatId: string; phone?: string };
   receiver?: { bankCode: string; accountNumber: string };
 }
-
-type AiEstimateAsset = "naira" | "dollar" | "crypto";
-
-type AiPaymentEstimate = {
-  fiatAmount?: number;
-  cryptoAmount?: number;
-  estimateAmount: number;
-  estimateAsset: AiEstimateAsset;
-};
 
 interface PaymentResponse {
   success: boolean;
@@ -123,14 +137,6 @@ declare global {
 const userAcctDetail: Sess =
   global.__USERACCTDETAIL__ ?? (global.__USERACCTDETAIL__ = {});
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __LAST_TERMINAL_FLOW__: Sess | undefined;
-}
-
-const lastTerminalFlow: Sess =
-  global.__LAST_TERMINAL_FLOW__ ?? (global.__LAST_TERMINAL_FLOW__ = {});
-
 // 🧠 Keep userHistories persistent across API calls in Next.js
 
 declare global {
@@ -146,7 +152,7 @@ dotenv.config();
 
 const model = new ChatOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
-  model: "~google/gemini-flash-latest",
+  model: "google/gemini-3.5-flash",
   configuration: {
     baseURL: "https://openrouter.ai/api/v1",
   },
@@ -176,7 +182,7 @@ User input:
     bank_name:
       "The bank name must be a valid Nigerian bank name, including microfinance and digital banks such as 'Access Bank' or 'OPay'. If the user provides a shortened or informal name, convert it to the full official bank name. For example, convert 'uba' to 'UNITED BANK OF AFRICA'. Return an empty string '' if no bank name is provided.",
     crypto:
-      "the  crypto_asset is the crypto token that the user is using to pay e.g(bitcoin) and make it all in CAPITAL LETTER or empty string ''",
+      "The crypto asset/token the user wants to use. Return only one supported symbol in CAPITAL LETTERS: BTC for btc/bitcoin, ETH for eth/ethereum/ether, BNB for bnb/binance coin/binance token, TRON for tron/trx, or USDT for usdt/tether. Return an empty string '' if no supported crypto is provided.",
     network:
       "The blockchain network for the transaction. For USDT, detect whether the user means ERC20, TRC20, or BEP20 from the message. Return empty string '' if no network is mentioned.",
     estimation:
@@ -187,12 +193,17 @@ User input:
       "The account number is a Nigerian bank account number. It must contain exactly 10 digits, for example '7035194443' or '0169552625'. If you see a 10-digit number, treat it as acct_number, not receiver_phoneNumber. Return an empty string '' if no account number is provided.",
     receiver_phoneNumber:
       "The phone number is a Nigerian phone number. It must contain exactly 11 digits, for example '08035194433'. Never return a 10-digit value here because Nigerian account numbers are 10 digits. Return an empty string '' if no phone number is provided.",
-    name:
-      "the name of the person it can be any tribe name or english name e.g (olawale,maxwell,john) detect any name provided by the user or empty string ''",
-    id:
-      "The id is in this format: '2S-HKVT5E'. It must always start with '2S-' followed by exactly 6 uppercase letters and/or numbers. Example: '2S-HKVT5E'. Return an empty string '' if no id is provided.",
-    type:
-      "set type to be transfer when a user to transact or send crypto or set type to be gift when user to send gift, or set type to be request  when a user want to request for there payment ",
+    name: "the name of the person it can be any tribe name or english name e.g (olawale,maxwell,john) detect any name provided by the user or empty string ''",
+    complaintType:
+      "The complaint type for a report. Return exactly one of: stolen_funds, fraud, track_transaction. If user says stolen funds, missing funds, disappeared funds, phishing, wrong address, or funds were stolen, use stolen_funds. If user says scam or fraud, use fraud. If user wants to track a transaction, use track_transaction. Return empty string '' if no report complaint type is provided.",
+    walletAddress:
+      "The reporter/user wallet address. Detect crypto wallet addresses, for example Tron addresses starting with T, EVM addresses starting with 0x, or BTC addresses. Return empty string '' if missing.",
+    fraudsterWalletAddress:
+      "The fraudster/scammer wallet address, if the user provides one. Detect crypto wallet addresses. Return empty string '' if missing or if the user says skip/no/none.",
+    description:
+      "A short report description of what happened. Return the user's explanation if they describe the issue. Return empty string '' if missing.",
+    id: "The id is in this format: '2S-HKVT5E'. It must always start with '2S-' followed by exactly 6 uppercase letters and/or numbers. Example: '2S-HKVT5E'. Return an empty string '' if no id is provided.",
+    type: "set type to be report when a user wants to report stolen funds, fraud, scam, phishing, missing funds, or track a transaction. set type to be transfer when a user to transact or send crypto or set type to be gift when user to send gift, or set type to be request when a user want to request for there payment ",
   });
 
   const chain = prompt.pipe(model).pipe(outputParser);
@@ -215,9 +226,188 @@ User input:
       acct_number: null,
       receiver_phoneNumber: null,
       name: null,
+      complaintType: null,
+      walletAddress: null,
+      fraudsterWalletAddress: null,
+      description: null,
       gift_id: null,
     };
   }
+}
+
+function normalizeComplaintType(value: unknown): ComplaintType | "" {
+  const complaint = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (
+    complaint.includes("stolen") ||
+    complaint.includes("missing") ||
+    complaint.includes("disappear") ||
+    complaint.includes("phishing")
+  ) {
+    return "stolen_funds";
+  }
+
+  if (complaint.includes("track") || complaint.includes("transaction")) {
+    return "track_transaction";
+  }
+
+  if (complaint.includes("fraud") || complaint.includes("scam")) {
+    return "fraud";
+  }
+
+  return SUPPORTED_COMPLAINT_TYPES.has(complaint as ComplaintType)
+    ? (complaint as ComplaintType)
+    : "";
+}
+
+function looksLikeReportRequest(phrase: string) {
+  return /\b(report|complain|complaint|fraud|scam|stolen|missing|disappear(?:ed)?|phishing|track\s+transaction)\b/i.test(
+    phrase,
+  );
+}
+
+function normalizeCryptoAsset(value: unknown) {
+  const crypto = String(value ?? "").trim();
+
+  if (!crypto) return "";
+
+  for (const [symbol, pattern] of CRYPTO_ALIASES) {
+    if (pattern.test(crypto)) {
+      return symbol;
+    }
+  }
+
+  const upperCrypto = crypto.toUpperCase();
+  return SUPPORTED_CRYPTO.has(upperCrypto) ? upperCrypto : "";
+}
+
+function isGreetingOnly(phrase: string) {
+  const normalized = phrase
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (!normalized) return false;
+
+  return /^(?:hi+|hello+|hey+|yo+|sup|good\s+(?:morning|afternoon|evening)|how\s+far|how\s+body|how\s+you\s+dey|wetin\s+dey|what'?s\s+up|whats\s+up|how\s+are\s+you|how\s+are\s+you\s+doing|how\s+is\s+it\s+going)(?:\s+(?:there|boss|chief|bro|sis|my\s+g|fam|dear|please|pls))?$/.test(
+    normalized,
+  );
+}
+
+async function buildGreetingTypeReply(messageText: string) {
+  const prompt = ChatPromptTemplate.fromMessages([
+    [
+      "system",
+      `You are a cheerful Nigerian crypto assistant for 2settle.
+Reply to the user's greeting with one short, friendly greeting only.
+Use natural Nigerian warmth when it fits.
+Do not ask what they want to do.
+Do not mention crypto, gifts, requests, payments, fees, or transactions.
+Do not use markdown.
+Keep it under 12 words.`,
+    ],
+    ["human", "{word}"],
+  ]);
+
+  try {
+    const parser = new StringOutputParser();
+    const greeting = await prompt.pipe(model).pipe(parser).invoke({
+      word: messageText,
+    });
+    const cleanGreeting = greeting.replace(/^["']|["']$/g, "").trim();
+
+    return `${cleanGreeting || "How far my chief! Everything dey soft."} ${GREETING_TYPE_QUESTION}`;
+  } catch (error) {
+    console.error("Greeting response failed:", error);
+    return `How far my chief! Everything dey soft. ${GREETING_TYPE_QUESTION}`;
+  }
+}
+
+function extractWalletAddresses(phrase: string) {
+  const matches =
+    phrase.match(
+      /\b(?:0x[a-fA-F0-9]{40}|T[a-zA-Z0-9]{33}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{25,39})\b/g,
+    ) ?? [];
+  return matches;
+}
+
+function normalizeReportInput(
+  filtered: Sess,
+  currentSession: Sess,
+  phrase: string,
+) {
+  const isReportFlow =
+    filtered.type === "report" ||
+    currentSession.type === "report" ||
+    looksLikeReportRequest(phrase);
+
+  if (!isReportFlow) {
+    return filtered;
+  }
+
+  const nextField = currentSession.nextField;
+  const normalized: Sess = { ...filtered, type: "report" };
+
+  if (filtered.complaintType) {
+    normalized.complaintType = normalizeComplaintType(filtered.complaintType);
+  }
+
+  if (filtered.name && !filtered.reportName) {
+    normalized.reportName = filtered.name;
+    delete normalized.name;
+  }
+
+  if (filtered.receiver_phoneNumber && !filtered.reportPhoneNumber) {
+    normalized.reportPhoneNumber = filtered.receiver_phoneNumber;
+    delete normalized.receiver_phoneNumber;
+  }
+
+  if (filtered.walletAddress && !filtered.reportWalletAddress) {
+    normalized.reportWalletAddress = filtered.walletAddress;
+    delete normalized.walletAddress;
+  }
+
+  if (filtered.description && !filtered.reportDescription) {
+    normalized.reportDescription = filtered.description;
+    delete normalized.description;
+  }
+
+  if (
+    nextField === "fraudsterWalletAddress" &&
+    /^(skip|no|none|nil|n\/a)$/i.test(phrase.trim())
+  ) {
+    normalized.fraudsterWalletAddress = "";
+  }
+
+  if (nextField === "reportName" && !normalized.reportName) {
+    normalized.reportName = phrase.trim();
+  }
+
+  if (nextField === "reportPhoneNumber" && !normalized.reportPhoneNumber) {
+    const phone = phrase.replace(/\D/g, "");
+    if (phone) normalized.reportPhoneNumber = phone;
+  }
+
+  if (nextField === "reportWalletAddress" && !normalized.reportWalletAddress) {
+    normalized.reportWalletAddress = phrase.trim();
+  }
+
+  if (
+    nextField === "fraudsterWalletAddress" &&
+    normalized.fraudsterWalletAddress === undefined
+  ) {
+    normalized.fraudsterWalletAddress = phrase.trim();
+  }
+
+  if (nextField === "reportDescription" && !normalized.reportDescription) {
+    normalized.reportDescription = phrase.trim();
+  }
+
+  return normalized;
 }
 
 function normalizeExtractedData(
@@ -241,7 +431,7 @@ function normalizeExtractedData(
   }
 
   if (normalized.crypto) {
-    normalized.crypto = String(normalized.crypto).trim().toUpperCase();
+    normalized.crypto = normalizeCryptoAsset(normalized.crypto);
   }
 
   if (normalized.network) {
@@ -249,10 +439,11 @@ function normalizeExtractedData(
   }
 
   if (!normalized.crypto) {
-    const upperPhrase = phrase.toUpperCase();
-    const cryptoMatch = upperPhrase.match(/\b(BTC|ETH|BNB|TRON|USDT)\b/);
-    if (cryptoMatch) {
-      normalized.crypto = cryptoMatch[1];
+    for (const [symbol, pattern] of CRYPTO_ALIASES) {
+      if (pattern.test(phrase)) {
+        normalized.crypto = symbol;
+        break;
+      }
     }
   }
 
@@ -272,8 +463,7 @@ function normalizeExtractedData(
   if (
     normalized.Amount &&
     normalized.network &&
-    String(normalized.Amount) ===
-      String(normalized.network).replace(/\D/g, "")
+    String(normalized.Amount) === String(normalized.network).replace(/\D/g, "")
   ) {
     normalized.Amount = "";
   }
@@ -283,6 +473,18 @@ function normalizeExtractedData(
     if (idMatch) {
       normalized.id = idMatch[0];
     }
+  }
+
+  const walletAddresses = extractWalletAddresses(phrase);
+  if (!normalized.walletAddress && walletAddresses[0]) {
+    normalized.walletAddress = walletAddresses[0];
+  }
+  if (!normalized.fraudsterWalletAddress && walletAddresses[1]) {
+    normalized.fraudsterWalletAddress = walletAddresses[1];
+  }
+
+  if (normalized.complaintType) {
+    normalized.complaintType = normalizeComplaintType(normalized.complaintType);
   }
 
   if (amount) {
@@ -296,7 +498,8 @@ function normalizeExtractedData(
       const extractedAmount = match[1]?.replace(/,/g, "");
       const previousChar = phrase[match.index! - 1] ?? "";
       const nextChar = phrase[match.index! + match[0].length] ?? "";
-      const isEmbeddedInWord = /[a-z]/i.test(previousChar) || /[a-z]/i.test(nextChar);
+      const isEmbeddedInWord =
+        /[a-z]/i.test(previousChar) || /[a-z]/i.test(nextChar);
 
       if (
         extractedAmount &&
@@ -330,141 +533,6 @@ function isValidAmount(value: unknown) {
   return Number.isFinite(amount) && amount > 0;
 }
 
-function normalizeEstimateAsset(value: unknown): AiEstimateAsset {
-  const estimateAsset = String(value ?? "").trim().toLowerCase();
-
-  if (estimateAsset === "dollar" || estimateAsset === "usd" || estimateAsset === "usdt") {
-    return "dollar";
-  }
-
-  if (estimateAsset === "crypto" || estimateAsset === "crypt") {
-    return "crypto";
-  }
-
-  return "naira";
-}
-
-function parseRateValue(value: unknown): number {
-  const rate =
-    typeof value === "number"
-      ? value
-      : Number(String(value ?? "").replace(/,/g, ""));
-
-  if (!Number.isFinite(rate) || rate <= 0) {
-    throw new Error("Invalid rate received");
-  }
-
-  return rate;
-}
-
-function getAccountConfirmationQuestion(updatedSession: Sess) {
-  return `Please confirm if these account details are correct: **Name:** ${updatedSession.receiver_name} **Bank:** ${updatedSession.bank_name} **Account Number:** ${updatedSession.acct_number} Are these details correct? (Yes/No)`;
-}
-
-function getAccountConfirmationResponse(messageText: string) {
-  const normalized = messageText.trim().toLowerCase();
-
-  if (/^(yes|y|yeah|yep|correct|sure|ok|okay|confirm|confirmed|true)\b/i.test(normalized)) {
-    return true;
-  }
-
-  if (/^(no|n|nope|incorrect|wrong|not correct|false)\b/i.test(normalized)) {
-    return false;
-  }
-
-  return null;
-}
-
-function requiresAccountConfirmation(updatedSession: Sess) {
-  const type = (updatedSession.type || "transfer") as PaymentType;
-  const isRequestFulfillment =
-    type === "request" && updatedSession.requestFulfillment === true;
-  const isClaimGift =
-    type === "gift" && updatedSession.claimGiftMode === true;
-
-  return (
-    type === "transfer" ||
-    (isClaimGift && updatedSession.giftReadyToClaim === true) ||
-    (type === "request" && !isRequestFulfillment)
-  );
-}
-
-async function fetchAiRate(): Promise<number> {
-  const engineBase =
-    process.env.NEXT_PUBLIC_SETTLE_API_URL ?? "http://localhost:3500/v1";
-  const response = await axios.get<{
-    rate?: string | number;
-    rateNumeric?: string | number;
-  }>(`${engineBase}/rate/all`, { timeout: 15000 });
-
-  return parseRateValue(response.data.rateNumeric ?? response.data.rate);
-}
-
-async function buildAiPaymentEstimate(
-  amountValue: unknown,
-  estimateAssetValue: unknown,
-): Promise<AiPaymentEstimate> {
-  const estimateAmount = Number(amountValue);
-
-  if (!Number.isFinite(estimateAmount) || estimateAmount <= 0) {
-    throw new Error("Payment amount must be positive");
-  }
-
-  const estimateAsset = normalizeEstimateAsset(estimateAssetValue);
-
-  if (estimateAsset === "naira") {
-    return {
-      fiatAmount: estimateAmount,
-      estimateAmount,
-      estimateAsset,
-    };
-  }
-
-  if (estimateAsset === "dollar") {
-    const rate = await fetchAiRate();
-
-    return {
-      fiatAmount: estimateAmount * rate,
-      estimateAmount,
-      estimateAsset,
-    };
-  }
-
-  return {
-    cryptoAmount: estimateAmount,
-    estimateAmount,
-    estimateAsset,
-  };
-}
-
-function buildEngineAmountFields(
-  paymentEstimate: AiPaymentEstimate,
-): Pick<CreatePaymentInput, "fiatAmount" | "cryptoAmount" | "chargeFrom"> {
-  if (paymentEstimate.estimateAsset === "crypto") {
-    return {
-      cryptoAmount: paymentEstimate.cryptoAmount ?? paymentEstimate.estimateAmount,
-      chargeFrom: "fiat",
-    };
-  }
-
-  if (paymentEstimate.fiatAmount === undefined) {
-    throw new Error("Fiat amount could not be calculated");
-  }
-
-  return {
-    fiatAmount: paymentEstimate.fiatAmount,
-    chargeFrom: "crypto",
-  };
-}
-
-function requireFiatAmount(paymentEstimate: AiPaymentEstimate): number {
-  if (paymentEstimate.fiatAmount === undefined) {
-    throw new Error("Requests must be estimated in naira or dollar");
-  }
-
-  return paymentEstimate.fiatAmount;
-}
-
 function getMissingFields(updatedSession: Sess) {
   const type = (updatedSession.type || "transfer") as PaymentType;
   const missing: string[] = [];
@@ -473,8 +541,35 @@ function getMissingFields(updatedSession: Sess) {
   const estimation = String(updatedSession.estimation ?? "").toLowerCase();
   const isRequestFulfillment =
     type === "request" && updatedSession.requestFulfillment === true;
-  const isClaimGift =
-    type === "gift" && updatedSession.claimGiftMode === true;
+  const isClaimGift = type === "gift" && updatedSession.claimGiftMode === true;
+
+  if (type === "report") {
+    if (!SUPPORTED_COMPLAINT_TYPES.has(updatedSession.complaintType)) {
+      missing.push("complaintType");
+    }
+
+    if (!updatedSession.reportName) {
+      missing.push("reportName");
+    }
+
+    if (!/^\d{11,15}$/.test(String(updatedSession.reportPhoneNumber ?? ""))) {
+      missing.push("reportPhoneNumber");
+    }
+
+    if (!updatedSession.reportWalletAddress) {
+      missing.push("reportWalletAddress");
+    }
+
+    if (updatedSession.fraudsterWalletAddress === undefined) {
+      missing.push("fraudsterWalletAddress");
+    }
+
+    if (!updatedSession.reportDescription) {
+      missing.push("reportDescription");
+    }
+
+    return missing;
+  }
 
   if (!["transfer", "gift", "request"].includes(type)) {
     missing.push("type");
@@ -510,7 +605,11 @@ function getMissingFields(updatedSession: Sess) {
     missing.push("Amount");
   }
 
-  if (requiresAccountConfirmation(updatedSession)) {
+  if (
+    type === "transfer" ||
+    isClaimGift ||
+    (type === "request" && !isRequestFulfillment)
+  ) {
     if (!updatedSession.bank_name) {
       missing.push("bank_name");
     }
@@ -525,15 +624,6 @@ function getMissingFields(updatedSession: Sess) {
       !updatedSession.receiver_name
     ) {
       missing.push("receiver_name");
-    }
-
-    if (
-      updatedSession.bank_name &&
-      /^\d{10}$/.test(String(updatedSession.acct_number ?? "")) &&
-      updatedSession.receiver_name &&
-      updatedSession.accountDetailsConfirmed !== true
-    ) {
-      missing.push("account_confirmation");
     }
   }
 
@@ -554,66 +644,10 @@ function applyConversationState(updatedSession: Sess) {
 
   updatedSession.missingFields = missingFields;
   updatedSession.nextField = nextField;
-  updatedSession.nextQuestion =
-    nextField === "account_confirmation"
-      ? getAccountConfirmationQuestion(updatedSession)
-      : nextField
-        ? FIELD_QUESTIONS[nextField]
-        : "";
+  updatedSession.nextQuestion = nextField ? FIELD_QUESTIONS[nextField] : "";
   updatedSession.isReadyForPayment = missingFields.length === 0;
 
   return updatedSession;
-}
-
-function addCopyableItem(
-  items: CopyableItem[],
-  seen: Set<string>,
-  label: string,
-  text: unknown,
-  options: Omit<CopyableItem, "label" | "text"> = {},
-) {
-  if (typeof text !== "string" && typeof text !== "number") return;
-
-  const value = String(text).trim();
-  if (!value || ["undefined", "null", "none"].includes(value.toLowerCase())) {
-    return;
-  }
-
-  const key = `${label}:${value}`;
-  if (seen.has(key)) return;
-
-  seen.add(key);
-  items.push({ label, text: value, ...options });
-}
-
-function getCopyableItemsFromSession(updatedSession: Sess): CopyableItem[] {
-  const items: CopyableItem[] = [];
-  const seen = new Set<string>();
-  const paymentType = updatedSession.type?.toLowerCase();
-  const reference = updatedSession.id;
-
-  addCopyableItem(items, seen, "Wallet Address", updatedSession.wallet_address, {
-    isWallet: true,
-    reference,
-    paymentType,
-    expiresAt: updatedSession.expiresAt,
-  });
-
-  addCopyableItem(items, seen, "Transaction ID", updatedSession.id);
-
-  if (paymentType === "gift") {
-    addCopyableItem(items, seen, "Gift ID", updatedSession.id);
-  }
-
-  if (paymentType === "transfer") {
-    addCopyableItem(items, seen, "Transfer ID", updatedSession.id);
-  }
-
-  if (paymentType === "request") {
-    addCopyableItem(items, seen, "Request ID", updatedSession.id);
-  }
-
-  return items;
 }
 
 function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
@@ -641,12 +675,10 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     requestFulfillment,
     claimGiftMode,
     giftReadyToClaim,
-    accountDetailsConfirmed,
     id,
     totalcrypto,
     wallet_address,
     amountString,
-    expiresAt,
     ...rest
   } = currentSession;
 
@@ -664,13 +696,8 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   }
 
   if (nextType === "gift") {
-    const {
-      bank_name,
-      acct_number,
-      receiver_name,
-      bankcode,
-      ...giftSession
-    } = rest;
+    const { bank_name, acct_number, receiver_name, bankcode, ...giftSession } =
+      rest;
 
     return giftSession;
   }
@@ -688,81 +715,6 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   }
 
   return rest;
-}
-
-function isNewClaimGiftId(currentSession: Sess, incomingData: Sess) {
-  return (
-    currentSession.type === "gift" &&
-    currentSession.claimGiftMode === true &&
-    incomingData.id &&
-    incomingData.id !== currentSession.id
-  );
-}
-
-function resetClaimGiftForNewId(currentSession: Sess) {
-  const {
-    missingFields,
-    nextField,
-    nextQuestion,
-    isReadyForPayment,
-    verifier,
-    reply,
-    giftReadyToClaim,
-    Amount,
-    bank_name,
-    acct_number,
-    receiver_name,
-    bankcode,
-    accountDetailsConfirmed,
-    receiver_phoneNumber,
-    ...rest
-  } = currentSession;
-
-  return rest;
-}
-
-async function checkGiftIdForClaim(giftId: string) {
-  const updatedSession: Sess = {
-    type: "gift",
-    claimGiftMode: true,
-    id: giftId,
-  };
-
-  try {
-    console.log("checking gift id before claim.......");
-    const result = await engineGet<PaymentResponse>(`/payments/${giftId}`);
-    const status = result.payment.status?.toLowerCase();
-
-    if (result.payment.type !== "gift") {
-      updatedSession.reply = `this gift id is not available ${giftId}`;
-      updatedSession.verifier = true;
-    } else if (status === "confirmed" || status === "pending_claim") {
-      updatedSession.giftReadyToClaim = true;
-      updatedSession.verifier = false;
-      updatedSession.Amount = String(result.payment.fiatAmount);
-      updatedSession.reply = `Gift ${giftId} is confirmed. Please provide your bank name so you can claim it.`;
-    } else if (status === "settled" || status === "settling") {
-      updatedSession.reply = "This gift has already been claimed.";
-      updatedSession.verifier = true;
-    } else if (
-      status === "created" ||
-      status === "pending" ||
-      status === "confirming" ||
-      status === "awaiting_payment"
-    ) {
-      updatedSession.reply = `this gift is still ${result.payment.status}, try again later `;
-      updatedSession.verifier = true;
-    } else {
-      updatedSession.reply = `this gift id is not available ${giftId}`;
-      updatedSession.verifier = true;
-    }
-  } catch (error: any) {
-    console.error("Check gift error:", error?.response?.data ?? error);
-    updatedSession.reply = `this gift id does not exist ${giftId}`;
-    updatedSession.verifier = true;
-  }
-
-  return applyConversationState(updatedSession);
 }
 
 export default async function handler(
@@ -800,34 +752,14 @@ export default async function handler(
     // Add user message to history
     const history = userHistories.get(chatId);
     history.push(new HumanMessage(messageText));
-    const giftIdInMessage =
-      messageText.toUpperCase().match(/\b2S-[A-Z0-9]{6}\b/)?.[0] ?? "";
-    const activeRequestIdCollection =
-      session[chatId]?.type === "request" &&
-      session[chatId]?.requestFulfillment !== true;
 
-    if (giftIdInMessage && !activeRequestIdCollection) {
-      let updatedSession = await checkGiftIdForClaim(giftIdInMessage);
-      const response = String(updatedSession.reply);
-      const copyableItems = getCopyableItemsFromSession(updatedSession);
-
-      if (updatedSession.verifier === true) {
-        lastTerminalFlow[chatId] = {
-          type: updatedSession.type,
-          claimGiftMode: updatedSession.claimGiftMode,
-          requestFulfillment: updatedSession.requestFulfillment,
-        };
-        updatedSession = {};
-        session[chatId] = {};
-        userHistories.set(chatId, []);
-      } else {
-        session[chatId] = updatedSession;
-        history.push(new AIMessage(response));
-      }
+    if (isGreetingOnly(messageText)) {
+      const greetingReply = await buildGreetingTypeReply(messageText);
+      history.push(new AIMessage(greetingReply));
+      session[chatId] = {};
 
       return res.status(200).json({
-        reply: response,
-        copyableItems,
+        reply: greetingReply,
       });
     }
 
@@ -837,11 +769,14 @@ export default async function handler(
       messageText,
     );
     // ✅ Remove keys that are null or empty
-    const filtered = Object.fromEntries(
+    let filtered = Object.fromEntries(
       Object.entries(intentData).filter(
         ([_, value]) => value !== "" && value !== "null" && value !== null,
       ),
     );
+
+    filtered = normalizeReportInput(filtered, session[chatId], messageText);
+
     if (
       session[chatId]?.type === "request" &&
       session[chatId]?.requestFulfillment
@@ -849,72 +784,17 @@ export default async function handler(
       filtered.type = "request";
     }
 
-    const claimGiftMentioned = /\bclaim(?:ing)?\s+(?:a\s+)?gift\b/i.test(
-      messageText,
-    );
     const wantsToClaimGift =
-      claimGiftMentioned ||
-      session[chatId]?.claimGiftMode === true ||
-      (giftIdInMessage &&
-        !activeRequestIdCollection &&
-        lastTerminalFlow[chatId]?.type === "gift" &&
-        lastTerminalFlow[chatId]?.claimGiftMode === true);
+      /\bclaim(?:ing)?\s+(?:a\s+)?gift\b/i.test(messageText) ||
+      session[chatId]?.claimGiftMode === true;
 
     if (wantsToClaimGift) {
       filtered.type = "gift";
       filtered.claimGiftMode = true;
     }
 
-    const shouldForceGiftIdCheck =
-      Boolean(giftIdInMessage) &&
-      !activeRequestIdCollection &&
-      (wantsToClaimGift ||
-        (filtered.type === "gift" && filtered.claimGiftMode === true) ||
-        !session[chatId]?.type);
-
-    if (shouldForceGiftIdCheck) {
-      filtered.id = giftIdInMessage;
-      filtered.type = "gift";
-      filtered.claimGiftMode = true;
-    }
-
-    const previousSession = session[chatId];
-    const accountConfirmationResponse =
-      previousSession?.nextField === "account_confirmation"
-        ? getAccountConfirmationResponse(messageText)
-        : null;
-
-    if (accountConfirmationResponse === true) {
-      filtered.accountDetailsConfirmed = true;
-    } else if (accountConfirmationResponse === false) {
-      filtered.accountDetailsConfirmed = false;
-      filtered.bank_name = "";
-      filtered.acct_number = "";
-      filtered.receiver_name = "";
-      filtered.bankcode = "";
-      filtered.receiver_phoneNumber = "";
-    }
-
-    let baseSession = resetSessionForFlowChange(session[chatId], filtered);
-
-    if (shouldForceGiftIdCheck || isNewClaimGiftId(baseSession, filtered)) {
-      baseSession = resetClaimGiftForNewId(baseSession);
-    }
-
-    const accountDetailsChanged =
-      (filtered.bank_name &&
-        filtered.bank_name !== baseSession.bank_name) ||
-      (filtered.acct_number &&
-        filtered.acct_number !== baseSession.acct_number);
-
-    if (accountDetailsChanged) {
-      baseSession.receiver_name = "";
-      baseSession.bankcode = "";
-      baseSession.accountDetailsConfirmed = false;
-    }
-
+    const baseSession = resetSessionForFlowChange(session[chatId], filtered);
     let updatedSession = { ...baseSession, ...filtered };
-    let shouldUseDirectReply = false;
 
     console.log("Updatedddd session:", updatedSession);
     if (updatedSession.crypto === "BTC") {
@@ -945,7 +825,7 @@ export default async function handler(
 
     // }
 
-    if (updatedSession.name) {
+    if (updatedSession.type !== "report" && updatedSession.name) {
       const beneficiaryDate = {
         beneficiary_nickname: updatedSession.name,
         beneficiary_acctNO: userAcctDetail[chatId].acct_number,
@@ -974,13 +854,6 @@ export default async function handler(
       userAcctDetail[chatId]["bank_name"] = updatedSession.bank_name;
       userAcctDetail[chatId]["acct_number"] = updatedSession.acct_number;
       userAcctDetail[chatId]["receiver_name"] = updatedSession.receiver_name;
-    }
-
-    if (
-      requiresAccountConfirmation(updatedSession) &&
-      updatedSession.accountDetailsConfirmed !== true
-    ) {
-      updatedSession.receiver_phoneNumber = "";
     }
 
     if (
@@ -1055,43 +928,39 @@ export default async function handler(
         updatedSession.reply = `this gift id does not exist ${updatedSession.id}`;
         updatedSession.verifier = true;
       }
-      shouldUseDirectReply = Boolean(updatedSession.reply);
-    }
-
-    if (
-      shouldForceGiftIdCheck &&
-      updatedSession.type === "gift" &&
-      updatedSession.claimGiftMode &&
-      updatedSession.id &&
-      updatedSession.reply
-    ) {
-      updatedSession = applyConversationState(updatedSession);
-
-      const copyableItems = getCopyableItemsFromSession(updatedSession);
-      const response = String(updatedSession.reply);
-
-      if (updatedSession.verifier === true) {
-        lastTerminalFlow[chatId] = {
-          type: updatedSession.type,
-          claimGiftMode: updatedSession.claimGiftMode,
-          requestFulfillment: updatedSession.requestFulfillment,
-        };
-        updatedSession = {};
-        session[chatId] = {};
-        userHistories.set(chatId, []);
-      } else {
-        session[chatId] = updatedSession;
-        history.push(new AIMessage(response));
-      }
-
-      return res.status(200).json({
-        reply: response,
-        copyableItems,
-      });
     }
 
     updatedSession = applyConversationState(updatedSession);
-    
+
+    if (
+      updatedSession.type === "report" &&
+      updatedSession.isReadyForPayment &&
+      !updatedSession.verifier
+    ) {
+      try {
+        const report = await enginePost<ReportResponse>("/reports", {
+          complaintType: updatedSession.complaintType,
+          name: updatedSession.reportName,
+          phoneNumber: updatedSession.reportPhoneNumber,
+          walletAddress: updatedSession.reportWalletAddress,
+          fraudsterWalletAddress:
+            updatedSession.fraudsterWalletAddress || undefined,
+          description: updatedSession.reportDescription,
+        });
+
+        updatedSession.reportId = report.data.report.reportId;
+        updatedSession.reportStatus = report.data.report.status;
+        updatedSession.reply = `Report submitted successfully. Your report ID is ${updatedSession.reportId}. Status: ${updatedSession.reportStatus}.`;
+        updatedSession.verifier = true;
+      } catch (error: any) {
+        console.error("Create report error:", error?.response?.data ?? error);
+        updatedSession.reply =
+          error?.response?.data?.error ??
+          "Failed to submit report. Please try again.";
+        updatedSession.verifier = true;
+      }
+    }
+
     if (
       updatedSession.type === "gift" &&
       updatedSession.claimGiftMode &&
@@ -1099,7 +968,6 @@ export default async function handler(
       updatedSession.id &&
       updatedSession.bankcode &&
       updatedSession.receiver_name &&
-      updatedSession.accountDetailsConfirmed === true &&
       /^\d{10}$/.test(String(updatedSession.acct_number ?? "")) &&
       !updatedSession.verifier
     ) {
@@ -1116,10 +984,9 @@ export default async function handler(
         updatedSession.reply =
           claimError === "Gift has already been claimed"
             ? "This gift has already been claimed."
-            : claimError ?? "Failed to claim gift";
+            : (claimError ?? "Failed to claim gift");
       }
       updatedSession.verifier = true;
-      shouldUseDirectReply = Boolean(updatedSession.reply);
     }
 
     if (
@@ -1141,20 +1008,14 @@ export default async function handler(
       updatedSession.wallet_address = payment.depositAddress;
       updatedSession.amountString = payment.fiatAmount;
       updatedSession.id = payment.reference;
-      updatedSession.expiresAt = payment.expiresAt;
       updatedSession.verifier = true;
-    } 
-
+    }
 
     if (updatedSession.isReadyForPayment && !updatedSession.verifier) {
-     if (updatedSession.type === "transfer") {
-        const paymentEstimate = await buildAiPaymentEstimate(
-          updatedSession.Amount,
-          updatedSession.estimation,
-        );
+      if (updatedSession.type === "transfer") {
         const user: CreatePaymentInput = {
           type: "transfer",
-          ...buildEngineAmountFields(paymentEstimate),
+          fiatAmount: Number(updatedSession.Amount),
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
@@ -1172,16 +1033,14 @@ export default async function handler(
         updatedSession.wallet_address = payment.depositAddress;
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
-        updatedSession.expiresAt = payment.expiresAt;
         updatedSession.verifier = true;
-      } else if (updatedSession.type === "gift" && !updatedSession.claimGiftMode) {
-        const paymentEstimate = await buildAiPaymentEstimate(
-          updatedSession.Amount,
-          updatedSession.estimation,
-        );
+      } else if (
+        updatedSession.type === "gift" &&
+        !updatedSession.claimGiftMode
+      ) {
         const user: CreatePaymentInput = {
           type: "gift",
-          ...buildEngineAmountFields(paymentEstimate),
+          fiatAmount: Number(updatedSession.Amount),
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
@@ -1195,17 +1054,11 @@ export default async function handler(
         updatedSession.wallet_address = payment.depositAddress;
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
-        updatedSession.expiresAt = payment.expiresAt;
         updatedSession.verifier = true;
       } else if (updatedSession.type === "request") {
-        const paymentEstimate = await buildAiPaymentEstimate(
-          updatedSession.Amount,
-          updatedSession.estimation,
-        );
         const user: CreatePaymentInput = {
           type: "request",
-          fiatAmount: requireFiatAmount(paymentEstimate),
-          fiatCurrency: "NGN",
+          fiatAmount: Number(updatedSession.Amount),
           payer: {
             chatId: chatId,
           },
@@ -1273,79 +1126,29 @@ export default async function handler(
       }
     }
 
-    const copyableItems = getCopyableItemsFromSession(updatedSession);
-    const terminalConversation = updatedSession.verifier === true;
-    let directReply = "";
-
-    if (updatedSession.reply) {
-      if (terminalConversation) {
-        directReply = String(updatedSession.reply);
-      } else if (
-        updatedSession.type === "gift" &&
-        updatedSession.claimGiftMode === true &&
-        shouldUseDirectReply
-      ) {
-        directReply = String(updatedSession.reply);
-      }
-    }
-
-    const prompt = directReply ? null : await chatPrompt(updatedSession);
-
-    if (terminalConversation) {
-      lastTerminalFlow[chatId] = {
-        type: updatedSession.type,
-        claimGiftMode: updatedSession.claimGiftMode,
-        requestFulfillment: updatedSession.requestFulfillment,
-      };
+    const prompt = await chatPrompt(updatedSession);
+    if (updatedSession.verifier) {
       updatedSession = {};
       session[chatId] = {};
-    } else if (
-      updatedSession.type !== "gift" ||
-      updatedSession.claimGiftMode !== true
-    ) {
-      delete lastTerminalFlow[chatId];
     }
     // Get AI response
-    let response = directReply;
+    const parser = new StringOutputParser();
+    const chain = prompt.pipe(model).pipe(parser);
 
-    if (!response && prompt) {
-      const parser = new StringOutputParser();
-      const chain = prompt.pipe(model).pipe(parser);
-
-      response = await chain.invoke({
-        word: messageText,
-        chat_history: history,
-      });
-    }
-
-    if (terminalConversation) {
-      userHistories.set(chatId, []);
-    } else {
-      history.push(new AIMessage(response));
-    }
+    const response = await chain.invoke({
+      word: messageText,
+      chat_history: history,
+    });
 
     session[chatId] = updatedSession;
 
+    // Add AI response to history
+    history.push(new AIMessage(response));
     console.log("userHistories", userHistories);
     res.status(200).json({
       reply: response,
-      copyableItems,
     });
   } catch (err: unknown) {
-    const error = err as any;
-    console.error("Error in /api/ai/geminiApi:", {
-      message: error?.message,
-      response: error?.response?.data,
-      status: error?.response?.status,
-    });
-
-    if (!res.headersSent) {
-      res.status(error?.response?.status ?? 500).json({
-        error:
-          error?.response?.data?.error ??
-          error?.message ??
-          "Something went wrong",
-      });
-    }
+    console.error("Error in /api/openai:", err);
   }
 }
