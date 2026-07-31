@@ -1,4 +1,4 @@
-import { greetings } from "@/features/chatbot/helpers/ChatbotConsts";
+import { isGreeting } from "@/features/chatbot/helpers/ChatbotConsts";
 import { shortWallet } from "@/helpers/ShortenAddress";
 import { useWalletStore } from "@/hooks/wallet/useWalletStore";
 import { resetAllTransactionState } from "@/utils/resetTransactionState";
@@ -117,7 +117,7 @@ export const displayWelcomeMenu = (chatInput?: string) => {
 
   console.log("User chatinput", chatInput);
 
-  if (greetings.includes((chatInput ?? "").trim().toLowerCase())) {
+  if (isGreeting(chatInput ?? "")) {
     // If user is past the start step, ask if they want to reset
     if (isNotAtStartStep()) {
       displayResetConfirmation();

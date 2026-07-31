@@ -1,8 +1,7 @@
-import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
-
-
-// 11. if user say YES. ask the user what name will you like to save the beneficiary with? and if NO end the conversation
-// 12. After you collect the beneficiary name, let the user know you have the beneficiary
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
 
 export async function chatPrompt(updatedSession: Record<string, any>) {
   const prompt = ChatPromptTemplate.fromMessages([
@@ -27,12 +26,19 @@ Session data so far:'
 - Bank Name: ${updatedSession.bank_name}
 - Account Number: ${updatedSession.acct_number} 
 - Account Name: ${updatedSession.receiver_name}
-- Account details confirmed: ${updatedSession.accountDetailsConfirmed ? "yes" : "no"}
 - Phone number: ${updatedSession.receiver_phoneNumber}
 - total crypto: ${updatedSession["totalcrypto"]}
 - Request fulfillment: ${updatedSession.requestFulfillment ? "yes" : "no"}
 - Claim gift mode: ${updatedSession.claimGiftMode ? "yes" : "no"}
 - Gift ready to claim: ${updatedSession.giftReadyToClaim ? "yes" : "no"}
+- Report complaint type: ${updatedSession.complaintType}
+- Report name: ${updatedSession.reportName}
+- Report phone number: ${updatedSession.reportPhoneNumber}
+- Report wallet address: ${updatedSession.reportWalletAddress}
+- Fraudster wallet address: ${updatedSession.fraudsterWalletAddress}
+- Report description: ${updatedSession.reportDescription}
+- Report id: ${updatedSession.reportId}
+- Reply: ${updatedSession.reply}
 - Missing fields: ${(updatedSession.missingFields || []).join(", ")}
 - Next field to collect: ${updatedSession.nextField}
 - Next question to ask: ${updatedSession.nextQuestion}
@@ -44,35 +50,38 @@ IMPORTANT VALIDATION RULES:
 - If "Next question to ask" has a value, ask only that question next.
 - If the user typed something but it is still listed in Missing fields, ask them to retype or clarify that exact value.
 - Do not invent missing values from chat history.
-- Never ask for phone number until the account details confirmation step is completed with Yes.
-- If "Next field to collect" is "account_confirmation", ask only "Next question to ask" and wait for Yes or No.
+- If Type is "report" and Reply has a value, say only that Reply.
+- If Type is "report" and "Next question to ask" has a value, ask only that question next.
 - For fulfill request, do not ask for Asset, Network, or Estimation until "Request fulfillment" is "yes".
 - If "Request fulfillment" is "no" and Reply contains an invalid/unavailable request id message, say only that Reply and ask the user to retype the request id.
 - For claim gift, do not ask for bank details until "Gift ready to claim" is "yes". Ask for the gift id first.
 
 
-1. Asset (BTC, ETH, BNB, TRON, USDT)
+1. Asset (BTC/Bitcoin, ETH/Ethereum, BNB/Binance token, TRON/TRX, USDT/Tether)
 2. Network (only if asset is USDT) if is usdt ask ERC20,TRC20,BEP20
 3. Estimation type: crypto, naira, or dollar
 4. Amount
 5. Bank name
 6. Account number
-7. ask if the account details is correctly which are: (DO NOT SKIP THIS PART!!!!  )
+7. ask if the account details is correctly which are:
 Name: ${updatedSession.receiver_name} 
 Bank name: ${updatedSession.bank_name} 
 Account number: ${updatedSession.acct_number}
+
 8.  phone number
-9. after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} = ₦${updatedSession["amountString"]} only to 2Settle wallet address to complete your transaction.
+9. after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} and you will be receiving ₦${updatedSession["amountString"]} transact_id: ${updatedSession.id}.
 10.this question should follow, would you like to save this person as beneficiary?
+11. if user say YES. ask the user what name will you like to save the beneficiary with? and if NO end the conversation
+12. After you collect the beneficiary name, let the user know you have the beneficiary
 
 THIS IS THE SECTION FOR CREATE GIFT, IF USER WANT TO CREATE
 if a user want to  send gift  to their friends, family or anybody
-1. Asset (BTC, ETH, BNB, TRON, USDT)
+1. Asset (BTC/Bitcoin, ETH/Ethereum, BNB/Binance token, TRON/TRX, USDT/Tether)
 2. Network (only if asset is USDT)
 3. Estimation type: crypto, naira, or dollar
 4. Amount
 5. phone number
-6.after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} and recipient will be receiving ₦${updatedSession["amountString"]}.
+6.after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} and recipient will be receiving ₦${updatedSession["amountString"]} Gift_id: ${updatedSession.id}.
 
 THIS IS THE SECTION FOR CREATE REQUEST, IF USER WANT TO REQUEST FOR PAYMENT
 1.Enter the amount you want to request in Naira
@@ -110,16 +119,26 @@ THIS IS THE SECTION FOR Fulfill Request, IF USER WANT TO Fulfill Request-----
 2. The backend checks whether the request id exists. You cannot verify request ids yourself from chat history.
 3. If Request fulfillment is "no", do not ask for crypto details yet. Ask for the request id, or if Reply has an invalid/unavailable id message, say that Reply.
 4. Only if Request fulfillment is "yes", collect these next:
-   1. Asset (BTC, ETH, BNB, TRON, USDT)
+   1. Asset (BTC/Bitcoin, ETH/Ethereum, BNB/Binance token, TRON/TRX, USDT/Tether)
    2. Network (only if asset is USDT) if is usdt ask ERC20,TRC20,BEP20
    3. phone number
 5. Ask only the Next question to ask from Session data.
 6. After the request is fulfilled, display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} for request_id: ${updatedSession.id}.
 7. ${updatedSession.reply}
 
+THIS IS THE SECTION FOR REPORT, IF USER WANTS TO REPORT STOLEN FUNDS, FRAUD, SCAM, PHISHING, MISSING FUNDS, OR TRACK TRANSACTION-----
+Collect these details one by one:
+1. Complaint type: stolen funds, fraud, or track transaction
+2. User full name
+3. User phone number
+4. User wallet address
+5. Fraudster wallet address. Tell the user they can type skip if they do not have it.
+6. Short description of what happened
+7. After the report is submitted, say ${updatedSession.reply}
 
 
-                If the user gives multiple values, extract what you can, but do not move beyond "Next question to ask".
+
+                If the user gives multiple values, extract what you can, confirm it, and move to the next question.
                 If the user provides a value but you need another value to compute, extract the value you have,
                  then ask for the value you need to compute the next one
                 eg if a user says he wants to send USDT, you need network to get wallet.
@@ -131,4 +150,3 @@ THIS IS THE SECTION FOR Fulfill Request, IF USER WANT TO Fulfill Request-----
   ]);
   return prompt;
 }
- 
