@@ -1019,6 +1019,7 @@ export default async function handler(
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
+          chargeFrom: "crypto",
           payer: {
             chatId: chatId,
           },
@@ -1044,6 +1045,7 @@ export default async function handler(
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
+          chargeFrom: "crypto",
           payer: {
             chatId: chatId,
           },
@@ -1059,6 +1061,7 @@ export default async function handler(
         const user: CreatePaymentInput = {
           type: "request",
           fiatAmount: Number(updatedSession.Amount),
+          chargeFrom: "crypto",
           payer: {
             chatId: chatId,
           },
