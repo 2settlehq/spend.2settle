@@ -58,6 +58,7 @@ const FIELD_QUESTIONS: Record<string, string> = {
   acct_number: "Please enter the 10-digit account number.",
   receiver_name:
     "Please confirm the bank name and account number so I can verify the account name.",
+  accountDetailsConfirmed: "",
   receiver_phoneNumber: "Please enter the recipient phone number.",
   id: "Please enter the gift id.",
   complaintType:
@@ -410,6 +411,59 @@ function normalizeReportInput(
   return normalized;
 }
 
+function parseYesNo(phrase: string) {
+  const normalized = phrase
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ");
+
+  if (
+    /\b(?:no|n|nope|incorrect|wrong)\b|\bnot\s+correct\b/.test(normalized)
+  ) {
+    return false;
+  }
+
+  if (
+    /\b(?:yes|y|yeah|yep|correct|right|ok|okay|sure|confirm|confirmed)\b/.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+
+  return null;
+}
+
+function normalizeAccountDetailsConfirmation(
+  filtered: Sess,
+  currentSession: Sess,
+  phrase: string,
+) {
+  if (currentSession.nextField !== "accountDetailsConfirmed") {
+    return filtered;
+  }
+
+  const confirmation = parseYesNo(phrase);
+
+  if (confirmation === true) {
+    return { ...filtered, accountDetailsConfirmed: true };
+  }
+
+  if (confirmation === false) {
+    return {
+      ...filtered,
+      accountDetailsConfirmed: false,
+      bank_name: undefined,
+      acct_number: undefined,
+      receiver_name: undefined,
+      bankcode: undefined,
+    };
+  }
+
+  return filtered;
+}
+
 function normalizeExtractedData(
   intentData: Record<string, any>,
   phrase: string,
@@ -533,6 +587,10 @@ function isValidAmount(value: unknown) {
   return Number.isFinite(amount) && amount > 0;
 }
 
+function getAccountDetailsConfirmationQuestion(updatedSession: Sess) {
+  return `Please confirm if these account details are correct:\nName: ${updatedSession.receiver_name}\nBank name: ${updatedSession.bank_name}\nAccount number: ${updatedSession.acct_number}\nReply yes to continue or no to correct them.`;
+}
+
 function getMissingFields(updatedSession: Sess) {
   const type = (updatedSession.type || "transfer") as PaymentType;
   const missing: string[] = [];
@@ -625,6 +683,15 @@ function getMissingFields(updatedSession: Sess) {
     ) {
       missing.push("receiver_name");
     }
+
+    if (
+      updatedSession.bank_name &&
+      /^\d{10}$/.test(String(updatedSession.acct_number ?? "")) &&
+      updatedSession.receiver_name &&
+      updatedSession.accountDetailsConfirmed !== true
+    ) {
+      missing.push("accountDetailsConfirmed");
+    }
   }
 
   if (
@@ -644,7 +711,12 @@ function applyConversationState(updatedSession: Sess) {
 
   updatedSession.missingFields = missingFields;
   updatedSession.nextField = nextField;
-  updatedSession.nextQuestion = nextField ? FIELD_QUESTIONS[nextField] : "";
+  updatedSession.nextQuestion =
+    nextField === "accountDetailsConfirmed"
+      ? getAccountDetailsConfirmationQuestion(updatedSession)
+      : nextField
+        ? FIELD_QUESTIONS[nextField]
+        : "";
   updatedSession.isReadyForPayment = missingFields.length === 0;
 
   return updatedSession;
@@ -672,6 +744,7 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     isReadyForPayment,
     verifier,
     reply,
+    accountDetailsConfirmed,
     requestFulfillment,
     claimGiftMode,
     giftReadyToClaim,
@@ -776,6 +849,11 @@ export default async function handler(
     );
 
     filtered = normalizeReportInput(filtered, session[chatId], messageText);
+    filtered = normalizeAccountDetailsConfirmation(
+      filtered,
+      session[chatId],
+      messageText,
+    );
 
     if (
       session[chatId]?.type === "request" &&
@@ -794,6 +872,17 @@ export default async function handler(
     }
 
     const baseSession = resetSessionForFlowChange(session[chatId], filtered);
+    const bankDetailsChanged =
+      (filtered.bank_name && filtered.bank_name !== baseSession.bank_name) ||
+      (filtered.acct_number &&
+        filtered.acct_number !== baseSession.acct_number);
+
+    if (bankDetailsChanged) {
+      baseSession.receiver_name = undefined;
+      baseSession.bankcode = undefined;
+      baseSession.accountDetailsConfirmed = false;
+    }
+
     let updatedSession = { ...baseSession, ...filtered };
 
     console.log("Updatedddd session:", updatedSession);
@@ -968,6 +1057,7 @@ export default async function handler(
       updatedSession.id &&
       updatedSession.bankcode &&
       updatedSession.receiver_name &&
+      updatedSession.accountDetailsConfirmed === true &&
       /^\d{10}$/.test(String(updatedSession.acct_number ?? "")) &&
       !updatedSession.verifier
     ) {
@@ -1034,6 +1124,7 @@ export default async function handler(
         updatedSession.wallet_address = payment.depositAddress;
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
+        updatedSession.transferSummary = `You are sending ${updatedSession.totalcrypto} ${updatedSession.crypto} and you will be receiving ₦${updatedSession.amountString}.`;
         updatedSession.verifier = true;
       } else if (
         updatedSession.type === "gift" &&
