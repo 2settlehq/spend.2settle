@@ -44,8 +44,9 @@ export function cleanCurrencyToFloatString(value: string): string {
 }
 
 export const formatPhoneNumber = (phoneNumber: string): string => {
-  if (phoneNumber.startsWith("0")) {
-    return "+234" + phoneNumber.slice(1);
+  const digits = phoneNumber.replace(/\D/g, "");
+  if (digits.startsWith("0")) {
+    return "+234" + digits.slice(1);
   }
   return phoneNumber;
 };
