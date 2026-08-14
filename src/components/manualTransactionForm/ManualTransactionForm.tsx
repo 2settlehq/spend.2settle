@@ -15,6 +15,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { createManualPayment, mapNetwork } from "@/services/enginePaymentService";
+import { formatPhoneNumber } from "@/utils/utilities";
 import { AssetSelector } from "./asset-selector";
 import { NetworkSelector } from "./network-selector";
 import { EstimationCurrencySelector } from "./estimation-currency-selector";
@@ -167,7 +168,7 @@ export default function CryptoTransactionForm() {
         network: mapNetwork(formData.network),
         cryptoAmount: parseFloat(formData.cryptoSent),
         walletAddress: formData.walletAddress as string,
-        payer: { phone: formData.customerNumber },
+        payer: { phone: formatPhoneNumber(formData.customerNumber) },
         receiver: {
           bankCode: formData.bankCode,
           accountNumber: formData.accountNumber,
