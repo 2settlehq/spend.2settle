@@ -26,8 +26,10 @@ Session data so far:'
 - Bank Name: ${updatedSession.bank_name}
 - Account Number: ${updatedSession.acct_number} 
 - Account Name: ${updatedSession.receiver_name}
+- Account details confirmed: ${updatedSession.accountDetailsConfirmed ? "yes" : "no"}
 - Phone number: ${updatedSession.receiver_phoneNumber}
 - total crypto: ${updatedSession["totalcrypto"]}
+- Transfer summary: ${updatedSession.transferSummary}
 - Request fulfillment: ${updatedSession.requestFulfillment ? "yes" : "no"}
 - Claim gift mode: ${updatedSession.claimGiftMode ? "yes" : "no"}
 - Gift ready to claim: ${updatedSession.giftReadyToClaim ? "yes" : "no"}
@@ -48,6 +50,8 @@ IMPORTANT VALIDATION RULES:
 - Only treat a value as collected if it appears in Session data and is not undefined, null, empty, or invalid.
 - If "Ready for payment creation" is "no", do not say any payment, amount, bank account, wallet, gift, or request has been verified or created.
 - If "Next question to ask" has a value, ask only that question next.
+- The account details confirmation question is mandatory whenever it is the next question. Do not skip it, do not ask for phone number, and do not create payment until the user replies yes.
+- If the user replies no to the account details confirmation, ask for the bank details again.
 - If the user typed something but it is still listed in Missing fields, ask them to retype or clarify that exact value.
 - Do not invent missing values from chat history.
 - If Type is "report" and Reply has a value, say only that Reply.
@@ -69,10 +73,8 @@ Bank name: ${updatedSession.bank_name}
 Account number: ${updatedSession.acct_number}
 
 8.  phone number
-9. after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} and you will be receiving ₦${updatedSession["amountString"]} transact_id: ${updatedSession.id}.
-10.this question should follow, would you like to save this person as beneficiary?
-11. if user say YES. ask the user what name will you like to save the beneficiary with? and if NO end the conversation
-12. After you collect the beneficiary name, let the user know you have the beneficiary
+9. after phone number, the first completed transfer sentence is mandatory and must be short. Display exactly: ${updatedSession.transferSummary || `You are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} and you will be receiving ₦${updatedSession["amountString"]}.`}
+10. Keep wallet address, transaction ID, timer, NOTE, copyable details, and beneficiary question as their own separate details when needed. Do not merge them into the short completed transfer sentence.
 
 THIS IS THE SECTION FOR CREATE GIFT, IF USER WANT TO CREATE
 if a user want to  send gift  to their friends, family or anybody
