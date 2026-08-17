@@ -105,7 +105,7 @@ const mergeCopyableItems = (
 };
 
 export const handleAiChat = async (chatInput?: string) => {
-  const { addMessages } = useChatStore.getState();
+  const { addMessages, setStreamingMessage } = useChatStore.getState();
   const getErrorMessage = (error: any) => {
     const message =
       error?.response?.data?.error ??
@@ -136,7 +136,9 @@ export const handleAiChat = async (chatInput?: string) => {
     }
     console.log("Generated new sessionId:", chatInput);
     // const reply = await OpenAI(updatedMessages, sessionId);
-    const reply = await geminiAi(chatInput, sessionId);
+    const reply = await geminiAi(chatInput, sessionId, (accumulatedText) => {
+      setStreamingMessage(accumulatedText);
+    });
     console.log("this is the response from backend", reply.reply);
     const copyableItems = mergeCopyableItems(
       reply.copyableItems,
@@ -223,5 +225,10 @@ export const handleAiChat = async (chatInput?: string) => {
         timestamp: new Date(),
       },
     ]);
+  } finally {
+    // The final text was already committed via addMessages above (success)
+    // or the error branch — always clear the live-streaming bubble so it
+    // doesn't linger or duplicate the persisted message.
+    setStreamingMessage(null);
   }
 };
