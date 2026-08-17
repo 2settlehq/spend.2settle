@@ -299,7 +299,11 @@ function isGreetingOnly(phrase: string) {
   );
 }
 
-async function buildGreetingTypeReply(messageText: string) {
+// Streams the greeting reply chunk-by-chunk instead of blocking on the full
+// completion. Quote-stripping only applies to the first chunk (can't know
+// which chunk is "last" while streaming, so trailing-quote cleanup is
+// dropped — acceptable cosmetic tradeoff for genuine token-level streaming).
+async function* streamGreetingReply(messageText: string): AsyncGenerator<string> {
   const prompt = ChatPromptTemplate.fromMessages([
     [
       "system",
@@ -314,18 +318,35 @@ Keep it under 12 words.`,
     ["human", "{word}"],
   ]);
 
+  let sawAnyChunk = false;
+  let isFirstChunk = true;
+
   try {
     const parser = new StringOutputParser();
-    const greeting = await prompt.pipe(model).pipe(parser).invoke({
+    const stream = await prompt.pipe(model).pipe(parser).stream({
       word: messageText,
     });
-    const cleanGreeting = greeting.replace(/^["']|["']$/g, "").trim();
 
-    return `${cleanGreeting || "How far my chief! Everything dey soft."} ${GREETING_TYPE_QUESTION}`;
+    for await (const chunk of stream) {
+      let toSend = chunk;
+      if (isFirstChunk) {
+        toSend = toSend.replace(/^["']/, "");
+        isFirstChunk = false;
+      }
+      if (toSend) {
+        sawAnyChunk = true;
+        yield toSend;
+      }
+    }
   } catch (error) {
     console.error("Greeting response failed:", error);
-    return `How far my chief! Everything dey soft. ${GREETING_TYPE_QUESTION}`;
   }
+
+  if (!sawAnyChunk) {
+    yield "How far my chief! Everything dey soft.";
+  }
+
+  yield ` ${GREETING_TYPE_QUESTION}`;
 }
 
 function extractWalletAddresses(phrase: string) {
@@ -967,8 +988,6 @@ export default async function handler(
     history.push(new HumanMessage(messageText));
 
     if (isGreetingOnly(messageText)) {
-      const greetingReply = await buildGreetingTypeReply(messageText);
-      history.push(new AIMessage(greetingReply));
       session[chatId] = {};
 
       res.writeHead(200, {
@@ -976,7 +995,14 @@ export default async function handler(
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
       });
-      res.write(greetingReply);
+
+      let greetingReply = "";
+      for await (const chunk of streamGreetingReply(messageText)) {
+        greetingReply += chunk;
+        res.write(chunk);
+      }
+
+      history.push(new AIMessage(greetingReply));
       return res.end();
     }
 
