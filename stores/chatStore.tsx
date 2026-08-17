@@ -75,6 +75,13 @@ type ChatStore = {
   serialized: SerializedMessage[];
   stepHistory: StepContextPatch[];
   loading: boolean;
+  // In-progress streamed AI reply text, rendered as a trailing bubble while
+  // non-null. Deliberately kept out of `messages`/`serialized` and excluded
+  // from persistence (see `partialize` below) — updating it at token rate
+  // must not run the JSX-serialization + localStorage-write pipeline that
+  // `addMessages` does. Once a stream finishes, the consumer clears this and
+  // calls `addMessages` with the final text, same as any other message.
+  streamingMessage: string | null;
 
   currentStep: StepContextPatch;
 
@@ -85,6 +92,7 @@ type ChatStore = {
   getDeserializedMessages: () => MessageType[];
 
   setLoading: (loading: boolean) => void;
+  setStreamingMessage: (text: string | null) => void;
 
   next: (step: StepContextPatch) => void;
   prev: () => void;
@@ -142,12 +150,15 @@ const useChatStore = create<ChatStore>()(
       return {
         ...initialState,
         loading: false,
+        streamingMessage: null,
         currentStep: {
           stepId: "start",
           transactionType: undefined,
         },
 
         setLoading: (loading: boolean) => set({ loading: loading }),
+        setStreamingMessage: (text: string | null) =>
+          set({ streamingMessage: text }),
 
         // when adding a message to the history, we serialize the JSX/text and save intent for components
         addMessages: (msgs) =>
@@ -238,7 +249,15 @@ const useChatStore = create<ChatStore>()(
           }),
       };
     },
-    { name: "chat-flow" },
+    {
+      name: "chat-flow",
+      // streamingMessage changes at token rate during an AI reply — it must
+      // never be written to localStorage on every update.
+      partialize: (state) => {
+        const { streamingMessage, ...rest } = state;
+        return rest;
+      },
+    },
   ),
 );
 

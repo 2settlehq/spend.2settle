@@ -464,6 +464,70 @@ function normalizeAccountDetailsConfirmation(
   return filtered;
 }
 
+// Deterministic fast-path for narrowly-typed fields we're already regex-matching
+// downstream. Skips the extraction LLM call entirely when it returns non-null.
+// Returns null when the field needs real semantic understanding (bank_name,
+// free-text report fields) or when no nextField is set yet — those always
+// defer to extractIntentEntity().
+function tryDeterministicExtraction(
+  currentSession: Sess,
+  phrase: string,
+): Record<string, any> | null {
+  const nextField = currentSession?.nextField;
+  const trimmed = phrase.trim();
+
+  switch (nextField) {
+    case "accountDetailsConfirmed":
+      // normalizeAccountDetailsConfirmation() re-derives yes/no from the raw
+      // phrase downstream, so an empty object is enough to skip the LLM call.
+      return parseYesNo(phrase) !== null ? {} : null;
+
+    case "acct_number":
+      return /^\d{10}$/.test(trimmed) ? { acct_number: trimmed } : null;
+
+    case "receiver_phoneNumber":
+      return /^\d{11}$/.test(trimmed)
+        ? { receiver_phoneNumber: trimmed }
+        : null;
+
+    case "Amount": {
+      const amountMatch = trimmed.match(
+        /^(?:[$₦#]\s*)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)$/,
+      );
+      const amount = amountMatch?.[1]?.replace(/,/g, "");
+      return amount ? { Amount: amount } : null;
+    }
+
+    case "id":
+      return /^2S-[A-Z0-9]{6}$/i.test(trimmed)
+        ? { id: trimmed.toUpperCase() }
+        : null;
+
+    case "crypto": {
+      for (const [symbol, pattern] of CRYPTO_ALIASES) {
+        if (pattern.test(phrase)) return { crypto: symbol };
+      }
+      return null;
+    }
+
+    case "network": {
+      const networkMatch = phrase.toUpperCase().match(/\b(ERC20|TRC20|BEP20)\b/);
+      return networkMatch ? { network: networkMatch[1] } : null;
+    }
+
+    case "estimation": {
+      const estimation = trimmed.toLowerCase();
+      if (["crypto", "crypt", "naira", "dollar"].includes(estimation)) {
+        return { estimation: estimation === "crypt" ? "crypto" : estimation };
+      }
+      return null;
+    }
+
+    default:
+      return null;
+  }
+}
+
 function normalizeExtractedData(
   intentData: Record<string, any>,
   phrase: string,
@@ -722,6 +786,82 @@ function applyConversationState(updatedSession: Sess) {
   return updatedSession;
 }
 
+// Deterministic reply resolver: the chatPrompt() rules already tell the LLM
+// to just parrot back one of these precomputed strings in every currently
+// modeled flow, so we can skip the reply-generation LLM call entirely and
+// return the string directly. Returns null only for session shapes this
+// resolver doesn't recognize, as a safety net that falls through to the LLM.
+//
+// Priority is `verifier`-first rather than a flat reply-then-nextField order:
+// gift-claim/request-fulfillment lookups can set both `reply` (an invalid/
+// pending/claimed status message) and a stale `nextField` (computed from
+// getMissingFields without knowing the id turned out to be unusable) on the
+// same turn. `verifier === true` marks a terminal turn (session resets right
+// after), so when it's set, the terminal message (`reply`, or the creation
+// success template) must win over any leftover `nextField` question.
+function resolveDeterministicReply(session: Sess): string | null {
+  if (session.type === "report" && session.reply) {
+    return session.reply;
+  }
+
+  if (session.verifier === true) {
+    if (session.reply) {
+      return session.reply;
+    }
+
+    if (session.isReadyForPayment) {
+      const creationReply = resolveCreationSuccessReply(session);
+      if (creationReply) return creationReply;
+    }
+  }
+
+  if (session.nextField === "accountDetailsConfirmed") {
+    return getAccountDetailsConfirmationQuestion(session);
+  }
+
+  if (session.nextField) {
+    return FIELD_QUESTIONS[session.nextField] ?? null;
+  }
+
+  if (session.isReadyForPayment) {
+    const creationReply = resolveCreationSuccessReply(session);
+    if (creationReply) return creationReply;
+  }
+
+  if (session.reply) {
+    return session.reply;
+  }
+
+  return null;
+}
+
+function resolveCreationSuccessReply(session: Sess): string | null {
+  const isClaimGift = session.type === "gift" && session.claimGiftMode === true;
+  const isRequestFulfillment =
+    session.type === "request" && session.requestFulfillment === true;
+
+  if (session.type === "transfer") {
+    return (
+      session.transferSummary ||
+      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`
+    );
+  }
+
+  if (session.type === "gift" && !isClaimGift) {
+    return `You are sending ${session.totalcrypto} ${session.crypto} to this wallet address ${session.wallet_address} and recipient will be receiving ₦${session.amountString} Gift_id: ${session.id}.`;
+  }
+
+  if (session.type === "request" && isRequestFulfillment) {
+    return `You are sending ${session.totalcrypto} ${session.crypto} to this wallet address ${session.wallet_address} for request_id: ${session.id}.`;
+  }
+
+  if (session.type === "request" && !isRequestFulfillment) {
+    return `You will receive ₦${session.amountString}.\nIt would be paid into:\nBank Name: ${session.bank_name}\nAccount Number: ${session.acct_number}\nAccount Name: ${session.receiver_name}\nYou can copy the requestId below and share with the person to fulfill the request.\nrequest_id: ${session.id}`;
+  }
+
+  return null;
+}
+
 function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   const previousType = currentSession.type;
   const nextType = incomingData.type;
@@ -831,16 +971,22 @@ export default async function handler(
       history.push(new AIMessage(greetingReply));
       session[chatId] = {};
 
-      return res.status(200).json({
-        reply: greetingReply,
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",
       });
+      res.write(greetingReply);
+      return res.end();
     }
 
     // 🧩 Step 1: Extract intent + entity
-    const intentData = normalizeExtractedData(
-      await extractIntentEntity(messageText),
-      messageText,
-    );
+    // Skip the extraction LLM call when the answer is a narrowly-typed field
+    // we already regex-match downstream (yes/no, digits, known id format).
+    const rawIntentData =
+      tryDeterministicExtraction(session[chatId], messageText) ??
+      (await extractIntentEntity(messageText));
+    const intentData = normalizeExtractedData(rawIntentData, messageText);
     // ✅ Remove keys that are null or empty
     let filtered = Object.fromEntries(
       Object.entries(intentData).filter(
@@ -1220,29 +1366,60 @@ export default async function handler(
       }
     }
 
-    const prompt = await chatPrompt(updatedSession);
+    // Most turns already have their reply fully determined by the session
+    // state above (chatPrompt()'s own rules just tell the LLM to parrot it
+    // back) — skip building the prompt and calling the LLM entirely when we
+    // can resolve it ourselves. Must run before the verifier reset below,
+    // since it reads pre-reset session fields.
+    const deterministicReply = resolveDeterministicReply(updatedSession);
+
     if (updatedSession.verifier) {
       updatedSession = {};
       session[chatId] = {};
     }
-    // Get AI response
-    const parser = new StringOutputParser();
-    const chain = prompt.pipe(model).pipe(parser);
-
-    const response = await chain.invoke({
-      word: messageText,
-      chat_history: history,
-    });
 
     session[chatId] = updatedSession;
+
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "X-Accel-Buffering": "no",
+    });
+
+    let response: string;
+
+    if (deterministicReply !== null) {
+      response = deterministicReply;
+      res.write(response);
+    } else {
+      // Fallback for session shapes the resolver doesn't recognize (and the
+      // greeting-adjacent edge cases): stream the LLM's reply token-by-token
+      // instead of blocking on the full completion.
+      const prompt = await chatPrompt(updatedSession);
+      const parser = new StringOutputParser();
+      const chain = prompt.pipe(model).pipe(parser);
+      const stream = await chain.stream({
+        word: messageText,
+        chat_history: history,
+      });
+
+      response = "";
+      for await (const chunk of stream) {
+        response += chunk;
+        res.write(chunk);
+      }
+    }
 
     // Add AI response to history
     history.push(new AIMessage(response));
     console.log("userHistories", userHistories);
-    res.status(200).json({
-      reply: response,
-    });
+    res.end();
   } catch (err: unknown) {
-    console.error("Error in /api/openai:", err);
+    console.error("Error in /api/ai/geminiApi:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Something went wrong. Please try again." });
+    } else {
+      res.end();
+    }
   }
 }
