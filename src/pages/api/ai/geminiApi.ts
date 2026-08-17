@@ -16,7 +16,7 @@ import crypto from "crypto";
 import { createBeneficiary } from "@/helpers/api_calls";
 import { resolveBankAccount } from "@/services/bank/bank.service";
 
-import useRate from "@/hooks/rates/useRate";
+import { fetchRate } from "@/services/rate/rates.service";
 
 import {
   claimGift,
@@ -1279,10 +1279,21 @@ export default async function handler(
     }
 
     if (updatedSession.isReadyForPayment && !updatedSession.verifier) {
+      // The payment engine only accepts NGN. When the user chose to estimate
+      // in dollars, `Amount` is a USD figure and must be converted before
+      // being sent as fiatAmount — "naira" estimation is already NGN as-is.
+      // Request creation doesn't offer a dollar estimation (always NGN), so
+      // it's untouched.
+      let fiatAmountInNgn = Number(updatedSession.Amount);
+      if (String(updatedSession.estimation).toLowerCase() === "dollar") {
+        const rateNumeric = await fetchRate();
+        fiatAmountInNgn = fiatAmountInNgn * rateNumeric;
+      }
+
       if (updatedSession.type === "transfer") {
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: Number(updatedSession.Amount),
+          fiatAmount: fiatAmountInNgn,
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
