@@ -862,10 +862,15 @@ function resolveCreationSuccessReply(session: Sess): string | null {
     session.type === "request" && session.requestFulfillment === true;
 
   if (session.type === "transfer") {
-    return (
+    const summary =
       session.transferSummary ||
-      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`
-    );
+      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`;
+    // Mentioning the wallet address here (matching the gift/request templates
+    // below) is what lets the frontend's getCopyableReplyItems() regex pick
+    // it up and render the Please Note / Copy Wallet Address / countdown
+    // timer bubbles — the original chatPrompt() rules for transfer never
+    // actually gave the LLM this value, so those bubbles never appeared.
+    return `${summary}\nWallet Address: ${session.wallet_address}`;
   }
 
   if (session.type === "gift" && !isClaimGift) {
