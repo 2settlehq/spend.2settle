@@ -16,7 +16,7 @@ import crypto from "crypto";
 import { createBeneficiary } from "@/helpers/api_calls";
 import { resolveBankAccount } from "@/services/bank/bank.service";
 
-import useRate from "@/hooks/rates/useRate";
+import { fetchRate } from "@/services/rate/rates.service";
 
 import {
   claimGift,
@@ -862,10 +862,15 @@ function resolveCreationSuccessReply(session: Sess): string | null {
     session.type === "request" && session.requestFulfillment === true;
 
   if (session.type === "transfer") {
-    return (
+    const summary =
       session.transferSummary ||
-      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`
-    );
+      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`;
+    // Mentioning the wallet address here (matching the gift/request templates
+    // below) is what lets the frontend's getCopyableReplyItems() regex pick
+    // it up and render the Please Note / Copy Wallet Address / countdown
+    // timer bubbles — the original chatPrompt() rules for transfer never
+    // actually gave the LLM this value, so those bubbles never appeared.
+    return `${summary}\nWallet Address: ${session.wallet_address}`;
   }
 
   if (session.type === "gift" && !isClaimGift) {
@@ -1274,10 +1279,21 @@ export default async function handler(
     }
 
     if (updatedSession.isReadyForPayment && !updatedSession.verifier) {
+      // The payment engine only accepts NGN. When the user chose to estimate
+      // in dollars, `Amount` is a USD figure and must be converted before
+      // being sent as fiatAmount — "naira" estimation is already NGN as-is.
+      // Request creation doesn't offer a dollar estimation (always NGN), so
+      // it's untouched.
+      let fiatAmountInNgn = Number(updatedSession.Amount);
+      if (String(updatedSession.estimation).toLowerCase() === "dollar") {
+        const rateNumeric = await fetchRate();
+        fiatAmountInNgn = fiatAmountInNgn * rateNumeric;
+      }
+
       if (updatedSession.type === "transfer") {
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: Number(updatedSession.Amount),
+          fiatAmount: fiatAmountInNgn,
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,

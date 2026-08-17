@@ -55,6 +55,20 @@ const normalizeReplyForCopyParsing = (reply = "") =>
     .replace(/`/g, "")
     .trim();
 
+// The transfer-completion reply carries "Wallet Address: 0x..." as its own
+// trailing line purely so getCopyableReplyItems() below can extract it into
+// the Copy Wallet Address bubble — it isn't meant to also show up as raw
+// text in the main summary bubble. Only strips it when it's the trailing
+// line (transfer's format); leaves gift/request's inline wallet-address
+// mention untouched, since that's part of their actual sentence.
+const stripTrailingWalletAddressLine = (reply = "") =>
+  reply
+    .replace(
+      /\n?wallet[\s_]*address\s*(?:is|:|-)?\s*[A-Za-z0-9][A-Za-z0-9:._-]{5,}\s*$/i,
+      "",
+    )
+    .trimEnd();
+
 const getCopyableReplyItems = (reply = ""): CopyableReplyItem[] => {
   const items: CopyableReplyItem[] = [];
   const seen = new Set<string>();
@@ -137,7 +151,7 @@ export const handleAiChat = async (chatInput?: string) => {
     console.log("Generated new sessionId:", chatInput);
     // const reply = await OpenAI(updatedMessages, sessionId);
     const reply = await geminiAi(chatInput, sessionId, (accumulatedText) => {
-      setStreamingMessage(accumulatedText);
+      setStreamingMessage(stripTrailingWalletAddressLine(accumulatedText));
     });
     console.log("this is the response from backend", reply.reply);
     const copyableItems = mergeCopyableItems(
@@ -158,7 +172,7 @@ export const handleAiChat = async (chatInput?: string) => {
     const incomingMessages: MessageType[] = [
       {
         type: "incoming",
-        content: <span>{reply.reply}</span>, // simplified: just the assistant's latest reply
+        content: <span>{stripTrailingWalletAddressLine(reply.reply)}</span>,
         timestamp: new Date(),
       },
       ...(shouldShowTransferTimeNotice
