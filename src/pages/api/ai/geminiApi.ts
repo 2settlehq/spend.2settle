@@ -16,7 +16,7 @@ import crypto from "crypto";
 import { createBeneficiary } from "@/helpers/api_calls";
 import { resolveBankAccount } from "@/services/bank/bank.service";
 
-import useRate from "@/hooks/rates/useRate";
+import { fetchRate } from "@/services/rate/rates.service";
 
 import {
   claimGift,
@@ -299,7 +299,11 @@ function isGreetingOnly(phrase: string) {
   );
 }
 
-async function buildGreetingTypeReply(messageText: string) {
+// Streams the greeting reply chunk-by-chunk instead of blocking on the full
+// completion. Quote-stripping only applies to the first chunk (can't know
+// which chunk is "last" while streaming, so trailing-quote cleanup is
+// dropped — acceptable cosmetic tradeoff for genuine token-level streaming).
+async function* streamGreetingReply(messageText: string): AsyncGenerator<string> {
   const prompt = ChatPromptTemplate.fromMessages([
     [
       "system",
@@ -314,18 +318,35 @@ Keep it under 12 words.`,
     ["human", "{word}"],
   ]);
 
+  let sawAnyChunk = false;
+  let isFirstChunk = true;
+
   try {
     const parser = new StringOutputParser();
-    const greeting = await prompt.pipe(model).pipe(parser).invoke({
+    const stream = await prompt.pipe(model).pipe(parser).stream({
       word: messageText,
     });
-    const cleanGreeting = greeting.replace(/^["']|["']$/g, "").trim();
 
-    return `${cleanGreeting || "How far my chief! Everything dey soft."} ${GREETING_TYPE_QUESTION}`;
+    for await (const chunk of stream) {
+      let toSend = chunk;
+      if (isFirstChunk) {
+        toSend = toSend.replace(/^["']/, "");
+        isFirstChunk = false;
+      }
+      if (toSend) {
+        sawAnyChunk = true;
+        yield toSend;
+      }
+    }
   } catch (error) {
     console.error("Greeting response failed:", error);
-    return `How far my chief! Everything dey soft. ${GREETING_TYPE_QUESTION}`;
   }
+
+  if (!sawAnyChunk) {
+    yield "How far my chief! Everything dey soft.";
+  }
+
+  yield ` ${GREETING_TYPE_QUESTION}`;
 }
 
 function extractWalletAddresses(phrase: string) {
@@ -841,10 +862,15 @@ function resolveCreationSuccessReply(session: Sess): string | null {
     session.type === "request" && session.requestFulfillment === true;
 
   if (session.type === "transfer") {
-    return (
+    const summary =
       session.transferSummary ||
-      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`
-    );
+      `You are sending ${session.totalcrypto} ${session.crypto} and you will be receiving ₦${session.amountString}.`;
+    // Mentioning the wallet address here (matching the gift/request templates
+    // below) is what lets the frontend's getCopyableReplyItems() regex pick
+    // it up and render the Please Note / Copy Wallet Address / countdown
+    // timer bubbles — the original chatPrompt() rules for transfer never
+    // actually gave the LLM this value, so those bubbles never appeared.
+    return `${summary}\nWallet Address: ${session.wallet_address}`;
   }
 
   if (session.type === "gift" && !isClaimGift) {
@@ -967,8 +993,6 @@ export default async function handler(
     history.push(new HumanMessage(messageText));
 
     if (isGreetingOnly(messageText)) {
-      const greetingReply = await buildGreetingTypeReply(messageText);
-      history.push(new AIMessage(greetingReply));
       session[chatId] = {};
 
       res.writeHead(200, {
@@ -976,7 +1000,14 @@ export default async function handler(
         "Cache-Control": "no-cache, no-transform",
         "X-Accel-Buffering": "no",
       });
-      res.write(greetingReply);
+
+      let greetingReply = "";
+      for await (const chunk of streamGreetingReply(messageText)) {
+        greetingReply += chunk;
+        res.write(chunk);
+      }
+
+      history.push(new AIMessage(greetingReply));
       return res.end();
     }
 
@@ -1248,10 +1279,21 @@ export default async function handler(
     }
 
     if (updatedSession.isReadyForPayment && !updatedSession.verifier) {
+      // The payment engine only accepts NGN. When the user chose to estimate
+      // in dollars, `Amount` is a USD figure and must be converted before
+      // being sent as fiatAmount — "naira" estimation is already NGN as-is.
+      // Request creation doesn't offer a dollar estimation (always NGN), so
+      // it's untouched.
+      let fiatAmountInNgn = Number(updatedSession.Amount);
+      if (String(updatedSession.estimation).toLowerCase() === "dollar") {
+        const rateNumeric = await fetchRate();
+        fiatAmountInNgn = fiatAmountInNgn * rateNumeric;
+      }
+
       if (updatedSession.type === "transfer") {
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: Number(updatedSession.Amount),
+          fiatAmount: fiatAmountInNgn,
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
