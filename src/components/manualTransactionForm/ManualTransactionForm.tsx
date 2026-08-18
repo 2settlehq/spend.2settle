@@ -14,7 +14,11 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { createManualPayment, mapNetwork } from "@/services/enginePaymentService";
+import {
+  createManualPayment,
+  getEnginePaymentErrorMessage,
+  mapNetwork,
+} from "@/services/enginePaymentService";
 import { formatPhoneNumber } from "@/utils/utilities";
 import { AssetSelector } from "./asset-selector";
 import { NetworkSelector } from "./network-selector";
@@ -186,7 +190,7 @@ export default function CryptoTransactionForm() {
       console.error("Error submitting transaction:", error);
       toast({
         title: "Error",
-        description: "Failed to submit transaction. Please try again.",
+        description: getEnginePaymentErrorMessage(error),
         variant: "destructive",
       });
     } finally {
