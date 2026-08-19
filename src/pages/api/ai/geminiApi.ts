@@ -84,7 +84,7 @@ interface ReportResponse {
 }
 
 interface CreatePaymentInput {
-  type: "transfer" | "gift" | "request";
+  type: "transfer" | "gift";
   fiatAmount: number;
   fiatCurrency?: string;
   crypto?: string;
@@ -92,6 +92,17 @@ interface CreatePaymentInput {
   chargeFrom?: "fiat" | "crypto";
   payer?: { chatId: string; phone?: string };
   receiver?: { bankCode: string; accountNumber: string };
+}
+
+interface CreateRequestPaymentInput {
+  type: "request";
+  fiatAmount: number;
+  fiatCurrency?: string;
+  receiver: {
+    bankCode: string;
+    accountNumber: string;
+    phone: string;
+  };
 }
 
 interface PaymentResponse {
@@ -267,6 +278,24 @@ function normalizeComplaintType(value: unknown): ComplaintType | "" {
 function looksLikeReportRequest(phrase: string) {
   return /\b(report|complain|complaint|fraud|scam|stolen|missing|disappear(?:ed)?|phishing|track\s+transaction)\b/i.test(
     phrase,
+  );
+}
+
+function looksLikeClaimGiftRequest(phrase: string) {
+  return /\b(?:claim(?:ing)?|receiv(?:e|ing)|redeem(?:ing)?|collect(?:ing)?|get(?:ting)?)\s+(?:a\s+)?gift\b/i.test(
+    phrase,
+  );
+}
+
+function looksLikeCreateGiftRequest(phrase: string, currentSession: Sess = {}) {
+  return (
+    /\b(?:creat(?:e|ing)|send(?:ing)?|mak(?:e|ing)|generat(?:e|ing))\s+(?:a\s+)?gift\b/i.test(
+      phrase,
+    ) ||
+    (currentSession.claimGiftMode === true &&
+      /\b(?:creat(?:e|ing)|send(?:ing)?|mak(?:e|ing)|generat(?:e|ing))(?:\s+(?:one|it))?\s+instead\b/i.test(
+        phrase,
+      ))
   );
 }
 
@@ -888,6 +917,34 @@ function resolveCreationSuccessReply(session: Sess): string | null {
   return null;
 }
 
+function getApiErrorResponse(error: any) {
+  const code = error?.response?.data?.code;
+  const status = error?.response?.status ?? 500;
+
+  if (code === "DEPOSIT_ADDRESS_IN_USE") {
+    return {
+      status,
+      body: {
+        code,
+        error:
+          "That deposit wallet is already tied to an active payment session. Please complete the current payment or wait for it to expire before starting another one.",
+      },
+    };
+  }
+
+  return {
+    status,
+    body: {
+      code,
+      error:
+        error?.response?.data?.error ??
+        error?.response?.data?.message ??
+        error?.message ??
+        "Something went wrong. Please try again.",
+    },
+  };
+}
+
 function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   const previousType = currentSession.type;
   const nextType = incomingData.type;
@@ -898,8 +955,16 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     nextType === "gift" &&
     incomingData.claimGiftMode === true &&
     currentSession.claimGiftMode !== true;
+  const switchingFromClaimGiftToCreate =
+    nextType === "gift" &&
+    incomingData.claimGiftMode === false &&
+    currentSession.claimGiftMode === true;
 
-  if (!switchingType && !switchingToClaimGift) {
+  if (
+    !switchingType &&
+    !switchingToClaimGift &&
+    !switchingFromClaimGiftToCreate
+  ) {
     return currentSession;
   }
 
@@ -981,6 +1046,9 @@ export default async function handler(
   if (!userAcctDetail[chatId]) {
     userAcctDetail[chatId] = {};
   }
+
+  let shouldClearSessionAfterEngineCall = false;
+
   try {
     console.log("chatId", chatId);
     // Ensure user history exists
@@ -1039,11 +1107,19 @@ export default async function handler(
       filtered.type = "request";
     }
 
+    const wantsToCreateGift = looksLikeCreateGiftRequest(
+      messageText,
+      session[chatId],
+    );
     const wantsToClaimGift =
-      /\bclaim(?:ing)?\s+(?:a\s+)?gift\b/i.test(messageText) ||
-      session[chatId]?.claimGiftMode === true;
+      !wantsToCreateGift &&
+      (looksLikeClaimGiftRequest(messageText) ||
+        session[chatId]?.claimGiftMode === true);
 
-    if (wantsToClaimGift) {
+    if (wantsToCreateGift) {
+      filtered.type = "gift";
+      filtered.claimGiftMode = false;
+    } else if (wantsToClaimGift) {
       filtered.type = "gift";
       filtered.claimGiftMode = true;
     }
@@ -1204,6 +1280,7 @@ export default async function handler(
       !updatedSession.verifier
     ) {
       try {
+        shouldClearSessionAfterEngineCall = true;
         const report = await enginePost<ReportResponse>("/reports", {
           complaintType: updatedSession.complaintType,
           name: updatedSession.reportName,
@@ -1243,6 +1320,7 @@ export default async function handler(
           bankCode: updatedSession.bankcode,
           accountNumber: updatedSession.acct_number,
         };
+        shouldClearSessionAfterEngineCall = true;
         await claimGift(updatedSession.id, gift);
         updatedSession.reply = `Your gift claim is successful. The payout will be sent to ${updatedSession.receiver_name}, ${updatedSession.bank_name} ${updatedSession.acct_number}.`;
       } catch (error: any) {
@@ -1269,6 +1347,7 @@ export default async function handler(
           phone: updatedSession.receiver_phoneNumber,
         },
       };
+      shouldClearSessionAfterEngineCall = true;
       const payment = await fulfillRequest(updatedSession.id, request);
       console.log("fulfilled request........", payment);
       updatedSession.totalcrypto = payment.cryptoAmount;
@@ -1306,6 +1385,7 @@ export default async function handler(
             accountNumber: updatedSession.acct_number,
           },
         };
+        shouldClearSessionAfterEngineCall = true;
         const payment = await createEnginePayment(user);
         console.log("payment........", payment);
         updatedSession.totalcrypto = payment.cryptoAmount;
@@ -1329,6 +1409,7 @@ export default async function handler(
             chatId: chatId,
           },
         };
+        shouldClearSessionAfterEngineCall = true;
         const payment = await createEnginePayment(user);
         console.log("gift........", payment);
         updatedSession.totalcrypto = payment.cryptoAmount;
@@ -1337,44 +1418,22 @@ export default async function handler(
         updatedSession.id = payment.reference;
         updatedSession.verifier = true;
       } else if (updatedSession.type === "request") {
-        const user: CreatePaymentInput = {
+        const user: CreateRequestPaymentInput = {
           type: "request",
           fiatAmount: Number(updatedSession.Amount),
-          chargeFrom: "crypto",
-          payer: {
-            chatId: chatId,
-          },
+          fiatCurrency: "NGN",
           receiver: {
             bankCode: updatedSession.bankcode,
             accountNumber: updatedSession.acct_number,
+            phone: updatedSession.receiver_phoneNumber,
           },
         };
+        shouldClearSessionAfterEngineCall = true;
         const payment = await createEnginePayment(user);
         console.log("request ........", payment);
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
         updatedSession.verifier = true;
-      }
-    }
-
-    if (updatedSession.type === "gift" && !updatedSession.claimGiftMode) {
-      if (updatedSession.id) {
-        try {
-          console.log("i am working perfectly.......");
-          const result = await engineGet<PaymentResponse>(
-            `/payments/${updatedSession.id}`,
-          );
-          if (result.payment.status === "pending") {
-            updatedSession.reply = `this gift is still ${result.payment.status}, try again later `;
-            updatedSession.verifier = true;
-          }
-          console.log(result.payment.status);
-        } catch (error: any) {
-          console.error("Check gift error:", error?.response?.data ?? error);
-          return res
-            .status(error?.response?.status ?? 500)
-            .json(error?.response?.data ?? { error: "Failed to check gift" });
-        }
       }
     }
 
@@ -1414,8 +1473,11 @@ export default async function handler(
     // can resolve it ourselves. Must run before the verifier reset below,
     // since it reads pre-reset session fields.
     const deterministicReply = resolveDeterministicReply(updatedSession);
+    const shouldClearHistoryAfterReply =
+      shouldClearSessionAfterEngineCall ||
+      (updatedSession.verifier === true && Boolean(updatedSession.wallet_address));
 
-    if (updatedSession.verifier) {
+    if (updatedSession.verifier || shouldClearSessionAfterEngineCall) {
       updatedSession = {};
       session[chatId] = {};
     }
@@ -1454,12 +1516,21 @@ export default async function handler(
 
     // Add AI response to history
     history.push(new AIMessage(response));
+    if (shouldClearHistoryAfterReply) {
+      userHistories.set(chatId, []);
+    }
     console.log("userHistories", userHistories);
     res.end();
   } catch (err: unknown) {
     console.error("Error in /api/ai/geminiApi:", err);
+    if (shouldClearSessionAfterEngineCall) {
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+    }
+
     if (!res.headersSent) {
-      res.status(500).json({ error: "Something went wrong. Please try again." });
+      const { status, body } = getApiErrorResponse(err);
+      res.status(status).json(body);
     } else {
       res.end();
     }

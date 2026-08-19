@@ -42,7 +42,7 @@ export interface EnginePayment {
 }
 
 interface CreatePaymentInput {
-  type: "transfer" | "gift" | "request";
+  type: "transfer" | "gift";
   fiatAmount?: number;
   cryptoAmount?: number;
   fiatCurrency?: string;
@@ -51,6 +51,17 @@ interface CreatePaymentInput {
   chargeFrom?: "fiat" | "crypto";
   payer?: { chatId: string; phone?: string };
   receiver?: { bankCode: string; accountNumber: string };
+}
+
+interface CreateRequestPaymentInput {
+  type: "request";
+  fiatAmount: number;
+  fiatCurrency?: string;
+  receiver: {
+    bankCode: string;
+    accountNumber: string;
+    phone: string;
+  };
 }
 
 interface FulfillRequestInput {
@@ -65,6 +76,10 @@ interface ClaimGiftInput {
 }
 
 export function getEnginePaymentErrorMessage(error: any): string {
+  if (error?.response?.data?.code === "DEPOSIT_ADDRESS_IN_USE") {
+    return "That deposit wallet is already tied to an active payment session. Please complete the current payment or wait for it to expire before starting another one.";
+  }
+
   const message =
     error?.response?.data?.error ??
     error?.response?.data?.message ??
@@ -75,19 +90,26 @@ export function getEnginePaymentErrorMessage(error: any): string {
   return code ? `${message} (${code})` : message;
 }
 
-export async function createEnginePayment(input: CreatePaymentInput): Promise<EnginePayment> {
+export async function createEnginePayment(
+  input: CreatePaymentInput | CreateRequestPaymentInput,
+): Promise<EnginePayment> {
   const body: Record<string, unknown> = {
     type: input.type,
     fiatCurrency: input.fiatCurrency ?? "NGN",
   };
 
   if (input.fiatAmount !== undefined) body.fiatAmount = input.fiatAmount;
-  if (input.cryptoAmount !== undefined) body.cryptoAmount = input.cryptoAmount;
-  if (input.crypto) body.crypto = mapCrypto(input.crypto);
-  if (input.network) body.network = mapPaymentNetwork(input.crypto, input.network);
-  if (input.chargeFrom) body.chargeFrom = input.chargeFrom;
-  if (input.payer) body.payer = input.payer;
   if (input.receiver) body.receiver = input.receiver;
+
+  if (input.type !== "request") {
+    if (input.cryptoAmount !== undefined) body.cryptoAmount = input.cryptoAmount;
+    if (input.crypto) body.crypto = mapCrypto(input.crypto);
+    if (input.network) {
+      body.network = mapPaymentNetwork(input.crypto, input.network);
+    }
+    if (input.chargeFrom) body.chargeFrom = input.chargeFrom;
+    if (input.payer) body.payer = input.payer;
+  }
 
   try {
     const response = await api.post<{ success: boolean; payment: EnginePayment }>(
