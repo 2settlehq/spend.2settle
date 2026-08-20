@@ -75,6 +75,43 @@ interface ClaimGiftInput {
   accountNumber: string;
 }
 
+const GENERIC_PAYMENT_ERROR = "Failed to create payment. Please try again.";
+const GENERIC_NETWORK_ERROR = "Could not reach the server. Please check your connection and try again.";
+
+// Patterns that indicate a message is leaking implementation details (stack
+// traces, file paths, DB/driver errors, etc.) rather than a clean, user-facing
+// validation message. Any match means we must not show the raw text to the user.
+const INTERNAL_LEAK_PATTERNS: RegExp[] = [
+  /\bat\s+.+\(.+:\d+:\d+\)/i, // stack trace frame: "at fn (file:line:col)"
+  /\.(ts|js|tsx|jsx|mjs|cjs):\d+/i, // "file.ts:42" style references
+  /node_modules/i,
+  /[a-zA-Z]:\\[^\s]+/, // Windows absolute path
+  /\/(?:home|var|usr|etc|src|app)\/[^\s]+/i, // Unix absolute path
+  /\b(SQLSTATE|ER_[A-Z_]+|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND)\b/,
+  /\b(MongoServerError|MongooseError|PrismaClientKnownRequestError|SequelizeError|Sequelize\w*Error)\b/,
+  /\b(TypeError|ReferenceError|SyntaxError|RangeError)\b/,
+  /cannot read propert(y|ies)/i,
+  /is not a function/i,
+  /undefined is not/i,
+  /(mongodb|postgres|postgresql|mysql|redis|amqp):\/\//i,
+  /\b(process\.env|api[_-]?key|secret|authorization:\s*bearer)\b/i,
+  /duplicate entry/i,
+  /stack\s*trace/i,
+];
+
+function isSafeForUser(message: unknown): message is string {
+  if (typeof message !== "string" || message.trim().length === 0) return false;
+  if (message.length > 200) return false;
+  if (message.includes("\n")) return false; // multi-line text is almost always a dump/trace
+  return !INTERNAL_LEAK_PATTERNS.some((pattern) => pattern.test(message));
+}
+
+/**
+ * Returns a message safe to show end users. Backend text is only trusted for
+ * 4xx responses (expected, client-correctable errors) and must pass a leak
+ * check; everything else (5xx, network failures, unexpected shapes) falls
+ * back to a generic message so internals never reach the UI.
+ */
 export function getEnginePaymentErrorMessage(error: any): string {
   if (error?.response?.data?.code === "DEPOSIT_ADDRESS_IN_USE") {
     return "That deposit wallet is already tied to an active payment session. Please complete the current payment or wait for it to expire before starting another one.";
@@ -86,8 +123,9 @@ export function getEnginePaymentErrorMessage(error: any): string {
     error?.message ??
     "Failed to create payment. Please try again.";
   const code = error?.response?.data?.code;
+  const isSafeCode = typeof code === "string" && /^[A-Z0-9_]+$/.test(code);
 
-  return code ? `${message} (${code})` : message;
+  return isSafeCode ? `${message} (${code})` : message;
 }
 
 export async function createEnginePayment(
