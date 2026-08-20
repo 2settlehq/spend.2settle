@@ -121,12 +121,20 @@ const mergeCopyableItems = (
 export const handleAiChat = async (chatInput?: string) => {
   const { addMessages, setStreamingMessage } = useChatStore.getState();
   const getErrorMessage = (error: any) => {
+    const code = error?.response?.data?.code;
+
+    if (code === "DEPOSIT_ADDRESS_IN_USE") {
+      return (
+        error?.response?.data?.error ??
+        "That deposit wallet is already tied to an active payment session. Please complete the current payment or wait for it to expire before starting another one."
+      );
+    }
+
     const message =
       error?.response?.data?.error ??
       error?.response?.data?.message ??
       error?.message ??
       "Sorry, something went wrong while processing your request. Please try again in a moment.";
-    const code = error?.response?.data?.code;
 
     return code ? `${message} (${code})` : message;
   };
