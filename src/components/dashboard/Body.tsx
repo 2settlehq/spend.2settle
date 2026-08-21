@@ -68,6 +68,9 @@ export default function Body() {
   const [showMaintenance, setShowMaintenance] = useState(false);
   const rate = rateDetails?.rateNumeric;
   const formattedRateUpdatedAt = formatRateUpdatedAt(rateDetails?.updatedAt);
+  const backgroundBlurClass = isOpen
+    ? "blur-lg scale-[1.01] pointer-events-none select-none"
+    : "blur-0 scale-100";
 
   // set rate for global use
   useEffect(() => {
@@ -182,7 +185,11 @@ export default function Body() {
 
   return (
     <div className="relative min-h-screen w-full flex flex-col overflow-hidden">
-      <div className={`absolute inset-0 ${isOpen ? "z-0" : "z-10"}`}>
+      <div
+        className={`absolute inset-0 transition-all duration-300 ease-out ${
+          isOpen ? "z-0" : "z-10"
+        } ${backgroundBlurClass}`}
+      >
         <Image
           src={getBackgroundImage()}
           alt="Background"
@@ -203,9 +210,9 @@ export default function Body() {
       {showMaintenance && <Maintenance onMaintainance={showMaintenance} />}
 
       <div
-        className={`relative flex-grow flex flex-col items-center justify-center p-4 md:p-8 ${
+        className={`relative flex-grow flex flex-col items-center justify-center p-4 md:p-8 transition-all duration-300 ease-out ${
           isOpen ? "z-0" : "z-20"
-        }`}
+        } ${backgroundBlurClass}`}
       >
         <div className="flex justify-center mb-20">
           <h3 className=" text-4xl font-Poppins font-bold ">
@@ -286,9 +293,9 @@ export default function Body() {
       </div>
 
       <div
-        className={`absolute left-0 bottom-0 transform-y-1/4 ${
+        className={`absolute left-0 bottom-0 transform-y-1/4 transition-all duration-300 ease-out ${
           isOpen ? "z-0" : "z-10"
-        } `}
+        } ${backgroundBlurClass}`}
       >
         {renderWale()}
       </div>
@@ -315,7 +322,9 @@ export default function Body() {
         </div>
       )}
       {/* Transaction Table Section */}
-      <div className="w-full max-w-6xl mx-auto px-4 mt-8 mb-12 relative z-20 ">
+      <div
+        className={`w-full max-w-6xl mx-auto px-4 mt-8 mb-12 relative z-20 transition-all duration-300 ease-out ${backgroundBlurClass}`}
+      >
         <h2 className="text-2xl font-bold text-left pl-4 mb-6 bg-white bg-opacity-90 py-2 rounded-lg">
           Recent Transactions
         </h2>
