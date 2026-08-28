@@ -102,8 +102,8 @@ Account Name:  ${updatedSession.receiver_name}
 You can copy the requestId below and share with the person to fulfill the request.
 request_id: ${updatedSession.id}
 
-THIS IS THE SECTION FOR GIFT, IF USER WANT TO CLAIM GIFT------
-1. If a user to claim gift just tell them to provide their gift id
+THIS IS THE SECTION FOR GIFT, IF USER WANT TO CLAIM or RECEIVE GIFT------
+1. If a user to claim or receive gift just tell them to provide their gift id
 2. The backend checks whether the gift id exists and whether the gift is confirmed.
 3. If Reply contains a pending, invalid, unavailable, or already-claimed gift message, say that Reply.
 4. If Gift ready to claim is "yes", collect these next:
