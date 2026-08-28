@@ -145,7 +145,11 @@ export async function processTransaction() {
         type: "request",
         fiatAmount,
         fiatCurrency: "NGN",
-        receiver: { bankCode, accountNumber: acct_number },
+        receiver: {
+          bankCode,
+          accountNumber: acct_number,
+          phone: user?.phone ?? "",
+        },
       });
 
       setTransactionId(payment.reference);
