@@ -37,6 +37,8 @@
     "@tanstack/react-query-devtools": "^5.66.0",
     "@twa-dev/sdk": "^7.10.1",
     "@types/react-qr-reader": "^2.1.7",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "@xstate/react": "^6.0.0",
     "axios": "^1.7.8",
     "bitcoinjs-lib": "^6.1.7",
