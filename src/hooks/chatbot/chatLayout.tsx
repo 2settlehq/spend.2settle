@@ -9,7 +9,6 @@ export interface ChatLayoutProps {
   chatInput: string;
   onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   onSubmit: (chatInput: string, onError?: (error: Error) => void) => void;
-  chatMessages: MessageType[];
   groupedMessages: Record<string, MessageType[]>;
   loading: boolean;
   dateSeperatorBadge: (dateString: string) => JSX.Element;
@@ -25,7 +24,6 @@ const ChatLayout = ({
   chatInput,
   onChange,
   onSubmit,
-  chatMessages,
   groupedMessages,
   loading,
   dateSeperatorBadge,
@@ -44,7 +42,6 @@ const ChatLayout = ({
         currentDate={currentDate}
       />
       <ChatMessages
-        chatMessages={chatMessages}
         groupedMessages={groupedMessages}
         loading={loading}
         dateSeperatorBadge={dateSeperatorBadge}

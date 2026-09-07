@@ -6,7 +6,6 @@ interface StreamAxiosLikeError {
   response: { status: number; data: any };
 }
 
-
 export interface GemCopyableItem {
   label: string;
   text: string;
@@ -22,12 +21,26 @@ export interface GemResponseType {
   claimGiftMode?: boolean;
 }
 
+export interface TransferFormData {
+  crypto: string;
+  network: string;
+  estimation: string;
+  amount: string;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  phoneNumber: string;
+}
 
-export const OpenAI = async (updatedMessages: any, sessionId: String): Promise<any> => {
+export const OpenAI = async (
+  updatedMessages: any,
+  sessionId: String,
+): Promise<any> => {
   try {
     const response = await axios.post<any>(
       `${apiURL}/api/openai`,
-      { messages: updatedMessages, sessionId: sessionId }
+      { messages: updatedMessages, sessionId: sessionId },
     );
     console.log("Use transaction created successfully");
     return response.data;
@@ -42,7 +55,7 @@ export const geminiAi = async (
   sessionId: String,
   onChunk?: (accumulatedText: string) => void,
 ): Promise<GemResponseType> => {
-  console.log('working',updatedMessages);
+  console.log("working", updatedMessages);
   try {
     const response = await fetch(`${apiURL}/api/ai/geminiApi`, {
       method: "POST",
@@ -89,4 +102,27 @@ export const geminiAi = async (
     console.error("Error storing user data:", error);
     throw error;
   }
+};
+
+export const submitTransferForm = async (
+  transferForm: TransferFormData,
+  sessionId: string,
+): Promise<GemResponseType> => {
+  const response = await fetch(`${apiURL}/api/ai/geminiApi`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transferForm, chatId: sessionId }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error: StreamAxiosLikeError = {
+      message: data?.error ?? data?.message ?? "Transfer could not be created",
+      response: { status: response.status, data },
+    };
+    throw error;
+  }
+
+  return data as GemResponseType;
 };

@@ -2,6 +2,7 @@ import { ConnectWalletWithChat } from "@/features/chatbot/handlers/chatHandlers/
 import { CopyableText } from "@/features/transact/CopyableText";
 import { CountdownTimer } from "@/helpers/format_date";
 import ConfirmAndProceedButton from "@/hooks/chatbot/confirmButtonHook";
+import TransferForm from "@/components/chatbot/TransferForm";
 import React from "react";
 import { MessageType } from "stores/chatStore";
 
@@ -10,6 +11,7 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   ConfirmAndProceedButton,
   CopyableText,
   CountdownTimer,
+  TransferForm,
 };
 
 export const renderMessageContent = (msg: MessageType) => {
@@ -20,7 +22,7 @@ export const renderMessageContent = (msg: MessageType) => {
       {/* Main message content */}
       {msg.content &&
         (typeof msg.content === "string" ? (
-          <p className="text-xs md:text-sm">{msg.content}</p>
+          <p className="text-sm md:text-base">{msg.content}</p>
         ) : (
           <span>{msg.content}</span>
         ))}
@@ -39,7 +41,7 @@ export const renderMessageContent = (msg: MessageType) => {
         })()}
 
       {intent?.kind === "text" && (
-        <p className="text-xs md:text-sm">{intent.value}</p>
+        <p className="text-sm md:text-base">{intent.value}</p>
       )}
     </div>
   );
