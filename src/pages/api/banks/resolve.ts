@@ -3,9 +3,13 @@ import { enginePost } from "@/lib/settle-client";
 
 interface ResolveResponse {
   data: {
-    account_name: string;
-    account_number: string;
-    bank_code: string;
+    account_name?: string;
+    account_number?: string;
+    bank_code?: string;
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+    bankName?: string;
   };
 }
 

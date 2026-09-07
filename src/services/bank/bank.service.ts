@@ -22,18 +22,46 @@ interface FetchBankDetailsResponse {
   bank_code: string;
 }
 
+interface ResolveBankApiResponse {
+  data: {
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+    bankName?: string;
+    account_name?: string;
+    account_number?: string;
+    bank_code?: string;
+    bank_name?: string;
+  };
+}
+
 export const fetchBankDetails = async (
   bank_code: string,
   acc_no: string,
 ): Promise<FetchBankDetailsResponse[] | null> => {
   try {
-    const response = await api.post<{
-      data: { accountName: string; accountNumber: string; bankCode: string; bankName: string };
-    }>("/api/banks/resolve", { bank_code, account_number: acc_no });
+    const response = await api.post<ResolveBankApiResponse>(
+      "/api/banks/resolve",
+      { bank_code, account_number: acc_no },
+    );
+    const details = response.data.data;
+    const accountName = details.accountName ?? details.account_name ?? "";
+    const accountNumber =
+      details.accountNumber ?? details.account_number ?? acc_no;
+    const bankCode = details.bankCode ?? details.bank_code ?? bank_code;
+    const bankName = details.bankName ?? details.bank_name ?? "";
 
-    const { accountName, accountNumber, bankCode, bankName } = response.data.data;
+    if (!accountName) return null;
+
     // Return in the same shape the rest of the code expects
-    return [{ bank_name: bankName, account_name: accountName, account_number: accountNumber, bank_code: bankCode }];
+    return [
+      {
+        bank_name: bankName,
+        account_name: accountName,
+        account_number: accountNumber,
+        bank_code: bankCode,
+      },
+    ];
   } catch (error) {
     console.error(
       `Error resolving bank account for code ${bank_code} / acc ${acc_no}:`,

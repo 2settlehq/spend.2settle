@@ -85,7 +85,8 @@ interface ReportResponse {
 
 interface CreatePaymentInput {
   type: "transfer" | "gift";
-  fiatAmount: number;
+  fiatAmount?: number;
+  cryptoAmount?: number;
   fiatCurrency?: string;
   crypto?: string;
   network?: string;
@@ -132,6 +133,29 @@ interface FulfillRequestInput {
 interface ClaimGiftInput {
   bankCode: string;
   accountNumber: string;
+}
+
+interface TransferFormPayload {
+  crypto: string;
+  network: string;
+  estimation: string;
+  amount: string;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName?: string;
+  phoneNumber: string;
+}
+
+interface ResolveBankResponse {
+  data: {
+    account_name?: string;
+    account_number?: string;
+    bank_code?: string;
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+  };
 }
 
 declare global {
@@ -1021,6 +1045,70 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   return rest;
 }
 
+function normalizeTransferForm(
+  transferForm: TransferFormPayload,
+): TransferFormPayload {
+  const crypto = normalizeCryptoAsset(transferForm?.crypto);
+  const estimation = String(transferForm?.estimation ?? "").toLowerCase();
+  const amount = String(transferForm?.amount ?? "").replace(/[^\d.]/g, "");
+  const bankName = String(transferForm?.bankName ?? "").trim();
+  const bankCode = String(transferForm?.bankCode ?? "").trim();
+  const accountNumber = String(transferForm?.accountNumber ?? "").replace(
+    /\D/g,
+    "",
+  );
+  const phoneNumber = String(transferForm?.phoneNumber ?? "").replace(
+    /\D/g,
+    "",
+  );
+  let network = String(transferForm?.network ?? "").toUpperCase();
+
+  if (crypto === "BTC") network = "BTC";
+  if (crypto === "ETH") network = "ETH";
+  if (crypto === "BNB") network = "BEP20";
+  if (crypto === "TRON") network = "TRC20";
+
+  if (!crypto || !SUPPORTED_CRYPTO.has(crypto)) {
+    throw new Error("Select a supported crypto asset.");
+  }
+
+  if (crypto === "USDT" && !SUPPORTED_USDT_NETWORKS.has(network)) {
+    throw new Error("Select ERC20, TRC20, or BEP20 for USDT.");
+  }
+
+  if (!SUPPORTED_ESTIMATIONS.has(estimation)) {
+    throw new Error("Select a valid estimation type.");
+  }
+
+  if (!isValidAmount(amount)) {
+    throw new Error("Enter a valid amount.");
+  }
+
+  if (!bankName || !bankCode) {
+    throw new Error("Select a bank from the bank search results.");
+  }
+
+  if (!/^\d{10}$/.test(accountNumber)) {
+    throw new Error("Enter a valid 10-digit account number.");
+  }
+
+  if (!/^\d{11}$/.test(phoneNumber)) {
+    throw new Error("Enter a valid 11-digit phone number.");
+  }
+
+  return {
+    crypto,
+    network,
+    estimation,
+    amount,
+    bankName,
+    bankCode,
+    accountNumber,
+    accountName: String(transferForm?.accountName ?? "").trim(),
+    phoneNumber,
+  };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -1028,15 +1116,17 @@ export default async function handler(
   if (req.method !== "POST")
     return res.status(405).json({ message: "Only POST allowed" });
 
-  const { messageText, chatId } = req.body;
+  const { messageText, chatId, transferForm } = req.body;
   console.log("the message.......", messageText);
   console.log("the chatId.......", chatId);
   // check for chatid
   if (!chatId)
     return res.status(400).json({ message: "ChatId must be included" });
   // check for message length
-  if (!messageText)
-    return res.status(400).json({ message: "Message must be included" });
+  if (!messageText && !transferForm)
+    return res
+      .status(400)
+      .json({ message: "Message or transfer details must be included" });
   // valid chatid
 
   if (!session[chatId]) {
@@ -1045,6 +1135,130 @@ export default async function handler(
 
   if (!userAcctDetail[chatId]) {
     userAcctDetail[chatId] = {};
+  }
+
+  if (transferForm) {
+    let normalizedForm: TransferFormPayload;
+
+    try {
+      normalizedForm = normalizeTransferForm(transferForm);
+    } catch (error) {
+      return res.status(400).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "The transfer details are invalid.",
+      });
+    }
+
+    try {
+      const bankDetails = await enginePost<ResolveBankResponse>(
+        "/banks/resolve",
+        {
+          bank_code: normalizedForm.bankCode,
+          account_number: normalizedForm.accountNumber,
+        },
+      );
+      const resolvedAccountName =
+        bankDetails.data?.account_name ?? bankDetails.data?.accountName;
+      const resolvedBankCode =
+        bankDetails.data?.bank_code ?? bankDetails.data?.bankCode;
+
+      if (!resolvedAccountName) {
+        return res.status(400).json({
+          error: "The account name could not be verified. Check the details.",
+        });
+      }
+
+      let updatedSession: Sess = {
+        type: "transfer",
+        crypto: normalizedForm.crypto,
+        network: normalizedForm.network,
+        estimation: normalizedForm.estimation,
+        Amount: normalizedForm.amount,
+        bank_name: normalizedForm.bankName,
+        bankcode: resolvedBankCode || normalizedForm.bankCode,
+        acct_number: normalizedForm.accountNumber,
+        receiver_name: resolvedAccountName,
+        accountDetailsConfirmed: true,
+        receiver_phoneNumber: normalizedForm.phoneNumber,
+      };
+
+      userAcctDetail[chatId] = {
+        bank_name: updatedSession.bank_name,
+        acct_number: updatedSession.acct_number,
+        receiver_name: updatedSession.receiver_name,
+        receiver_phoneNumber: updatedSession.receiver_phoneNumber,
+      };
+
+      updatedSession = applyConversationState(updatedSession);
+      session[chatId] = updatedSession;
+
+      if (!updatedSession.isReadyForPayment) {
+        return res.status(400).json({
+          error: "Please complete every transfer field with valid details.",
+        });
+      }
+
+      const amount = Number(updatedSession.Amount);
+      let fiatAmountInNgn = amount;
+      if (updatedSession.estimation === "dollar") {
+        fiatAmountInNgn *= await fetchRate();
+      }
+
+      const paymentInput: CreatePaymentInput = {
+        type: "transfer",
+        ...(updatedSession.estimation === "crypto"
+          ? { cryptoAmount: amount }
+          : { fiatAmount: fiatAmountInNgn }),
+        fiatCurrency: "NGN",
+        crypto: updatedSession.crypto,
+        network: updatedSession.network,
+        chargeFrom: "crypto",
+        payer: {
+          chatId,
+        },
+        receiver: {
+          bankCode: updatedSession.bankcode,
+          accountNumber: updatedSession.acct_number,
+        },
+      };
+
+      const payment = await createEnginePayment(paymentInput);
+      updatedSession.totalcrypto = payment.cryptoAmount;
+      updatedSession.wallet_address = payment.depositAddress;
+      updatedSession.amountString = payment.fiatAmount;
+      updatedSession.id = payment.reference;
+      updatedSession.transferSummary = `You are sending ${updatedSession.totalcrypto} ${updatedSession.crypto} and you will be receiving ₦${updatedSession.amountString}.`;
+      updatedSession.verifier = true;
+      session[chatId] = updatedSession;
+
+      const reply = resolveCreationSuccessReply(updatedSession);
+      const copyableItems = payment.depositAddress
+        ? [
+            {
+              label: "Wallet Address",
+              text: payment.depositAddress,
+              isWallet: true,
+              reference: payment.reference,
+              paymentType: "transfer",
+              expiresAt: payment.expiresAt,
+            },
+          ]
+        : [];
+
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+
+      return res.status(200).json({
+        reply: reply ?? updatedSession.transferSummary,
+        copyableItems,
+      });
+    } catch (error) {
+      console.error("Create transfer from form error:", error);
+      const { status, body } = getApiErrorResponse(error);
+      return res.status(status).json(body);
+    }
   }
 
   let shouldClearSessionAfterEngineCall = false;
@@ -1372,7 +1586,9 @@ export default async function handler(
       if (updatedSession.type === "transfer") {
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: fiatAmountInNgn,
+          ...(String(updatedSession.estimation).toLowerCase() === "crypto"
+            ? { cryptoAmount: Number(updatedSession.Amount) }
+            : { fiatAmount: fiatAmountInNgn }),
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,
