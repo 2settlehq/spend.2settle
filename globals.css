@@ -7,7 +7,15 @@
 
 body {
   @apply font-Poppins;
+}
 
+html,
+body,
+#__next {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
 }
 
 @keyframes chat-launcher-float {

@@ -6,6 +6,20 @@ interface StreamAxiosLikeError {
   response: { status: number; data: any };
 }
 
+const parseStructuredGeminiReply = (
+  value: string,
+): GemResponseType | undefined => {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return undefined;
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed.reply === "string" ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 export interface GemCopyableItem {
   label: string;
   text: string;
@@ -152,7 +166,7 @@ export const geminiAi = async (
 
     if (!response.body) {
       const text = await response.text();
-      return { reply: text };
+      return parseStructuredGeminiReply(text) ?? { reply: text };
     }
 
     const reader = response.body.getReader();
@@ -165,11 +179,15 @@ export const geminiAi = async (
       if (done) break;
 
       accumulated += decoder.decode(value, { stream: true });
-      onChunk?.(accumulated);
+      if (!accumulated.trimStart().startsWith("{")) {
+        onChunk?.(accumulated);
+      }
     }
 
+    accumulated += decoder.decode();
+
     console.log("Use transaction created successfully");
-    return { reply: accumulated };
+    return parseStructuredGeminiReply(accumulated) ?? { reply: accumulated };
   } catch (error) {
     console.error("Error storing user data:", error);
     throw error;

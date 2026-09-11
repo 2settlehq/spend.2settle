@@ -21,14 +21,14 @@ const ChatInput = ({ textareaRef, chatInput, onChange, onSubmit }: Props) => {
   };
 
   return (
-    <footer className="flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3 sm:px-5">
+    <footer className="flex-shrink-0 border-t border-gray-200 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-3">
       <div className="flex min-h-12 items-center gap-3">
         <textarea
           ref={textareaRef}
           value={chatInput}
           onChange={onChange}
           onKeyDown={handleKeyPress}
-          className="max-h-28 min-h-10 flex-grow resize-none border-none bg-transparent px-0 py-2 text-sm leading-5 outline-none"
+          className="max-h-28 min-h-10 min-w-0 flex-grow resize-none border-none bg-transparent px-0 py-2 text-base leading-5 outline-none md:text-sm"
           placeholder="Enter a message..."
           rows={1}
           spellCheck={false}
