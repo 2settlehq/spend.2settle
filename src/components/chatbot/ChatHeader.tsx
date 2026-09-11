@@ -12,7 +12,7 @@ const ChatHeader = ({ onClose, showDateDropdown, currentDate }: Props) => {
   const isOnline = useOnlineStatus();
   return (
     <header className="relative z-10 flex-shrink-0 bg-blue-500 text-white shadow">
-      <div className="flex min-h-[88px] items-center gap-3 px-6">
+      <div className="flex min-h-[52px] items-center gap-3 px-6">
         <button
           type="button"
           onClick={onClose}
@@ -35,18 +35,18 @@ const ChatHeader = ({ onClose, showDateDropdown, currentDate }: Props) => {
           </svg>
         </button>
 
-        <h2 className="min-w-0 flex-1 truncate text-left text-xl font-bold">
+        <h2 className="min-w-0 flex-1 truncate text-left text-base font-bold">
           2SettleHQ
         </h2>
 
-        <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-white">
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white">
           {isOnline ? (
             <Image
               src="/wale/wale-chat-icon.png"
               alt="Avatar"
-              width={32}
-              height={32}
-              className="rounded"
+              width={28}
+              height={28}
+              className="h-7 w-7 rounded-full object-cover"
             />
           ) : (
             <span
@@ -59,7 +59,7 @@ const ChatHeader = ({ onClose, showDateDropdown, currentDate }: Props) => {
         </span>
       </div>
       {showDateDropdown && currentDate && (
-        <div className="absolute left-1/2 top-full -translate-x-1/2 rounded-b-lg bg-gray-200 px-4 py-2 text-sm text-gray-700 shadow-md transition-all duration-300 ease-in-out">
+        <div className="absolute left-1/2 top-full -translate-x-1/2 rounded-b-lg bg-gray-200 px-4 py-2 text-xs text-gray-700 shadow-md transition-all duration-300 ease-in-out">
           {currentDate}
         </div>
       )}

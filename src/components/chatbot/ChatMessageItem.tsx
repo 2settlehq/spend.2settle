@@ -8,8 +8,17 @@ interface Props {
 }
 
 const ChatMessageItem = ({ msg }: Props) => {
-  const isTransferForm =
-    msg.intent?.kind === "component" && msg.intent.name === "TransferForm";
+  const isStructuredComponent =
+    msg.intent?.kind === "component" &&
+    [
+      "TransferForm",
+      "PaymentDetails",
+      "GiftForm",
+      "RequestPaymentForm",
+      "ClaimGiftForm",
+      "FulfillRequestForm",
+      "ReportForm",
+    ].includes(msg.intent.name);
 
   return (
     <li
@@ -31,12 +40,12 @@ const ChatMessageItem = ({ msg }: Props) => {
 
       <div
         className={`flex flex-col ${
-          isTransferForm ? "min-w-0 flex-1" : "max-w-[78%]"
+          isStructuredComponent ? "min-w-0 flex-1" : "max-w-[78%]"
         }`}
       >
         <div
           className={
-            isTransferForm
+            isStructuredComponent
               ? "leading-relaxed text-black"
               : `rounded-2xl px-4 py-3 leading-relaxed ${
                   msg.type === "incoming"
@@ -49,7 +58,7 @@ const ChatMessageItem = ({ msg }: Props) => {
         </div>
 
         <span
-          className={`mt-1 px-1 text-xs text-gray-500 ${
+          className={`mt-1 px-1 text-[10px] text-gray-500 ${
             msg.type === "incoming" ? "self-end" : "self-start"
           }`}
         >

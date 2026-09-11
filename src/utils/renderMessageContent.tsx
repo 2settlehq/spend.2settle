@@ -3,6 +3,14 @@ import { CopyableText } from "@/features/transact/CopyableText";
 import { CountdownTimer } from "@/helpers/format_date";
 import ConfirmAndProceedButton from "@/hooks/chatbot/confirmButtonHook";
 import TransferForm from "@/components/chatbot/TransferForm";
+import PaymentDetails from "@/components/chatbot/PaymentDetails";
+import {
+  ClaimGiftForm,
+  FulfillRequestForm,
+  GiftForm,
+  ReportForm,
+  RequestPaymentForm,
+} from "@/components/chatbot/WorkflowForms";
 import React from "react";
 import { MessageType } from "stores/chatStore";
 
@@ -12,6 +20,12 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   CopyableText,
   CountdownTimer,
   TransferForm,
+  PaymentDetails,
+  GiftForm,
+  RequestPaymentForm,
+  ClaimGiftForm,
+  FulfillRequestForm,
+  ReportForm,
 };
 
 export const renderMessageContent = (msg: MessageType) => {
@@ -22,7 +36,7 @@ export const renderMessageContent = (msg: MessageType) => {
       {/* Main message content */}
       {msg.content &&
         (typeof msg.content === "string" ? (
-          <p className="text-sm md:text-base">{msg.content}</p>
+          <p className="text-sm">{msg.content}</p>
         ) : (
           <span>{msg.content}</span>
         ))}
@@ -34,14 +48,28 @@ export const renderMessageContent = (msg: MessageType) => {
           if (!Comp) return null;
 
           return (
-            <div className="flex justify-center">
+            <div
+              className={
+                [
+                  "TransferForm",
+                  "PaymentDetails",
+                  "GiftForm",
+                  "RequestPaymentForm",
+                  "ClaimGiftForm",
+                  "FulfillRequestForm",
+                  "ReportForm",
+                ].includes(intent.name)
+                  ? "flex w-full justify-start"
+                  : "flex justify-center"
+              }
+            >
               <Comp {...intent.props} />
             </div>
           );
         })()}
 
       {intent?.kind === "text" && (
-        <p className="text-sm md:text-base">{intent.value}</p>
+        <p className="text-sm">{intent.value}</p>
       )}
     </div>
   );
