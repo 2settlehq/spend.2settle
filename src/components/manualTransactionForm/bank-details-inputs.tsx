@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { fetchBankNames, fetchBankDetails } from "@/services/bank/bank.service";
 
+const FLOATING_LABEL_CLASS =
+  "absolute left-3 top-0 z-10 bg-white px-1 text-xs font-medium leading-4 text-gray-700";
+
 interface BankDetailsInputsProps {
+  compact?: boolean;
+  idPrefix?: string;
   bankName: string;
   bankCode: string;
   accountNumber: string;
@@ -30,6 +36,8 @@ function parseBankItem(item: string): BankSuggestion {
 }
 
 export function BankDetailsInputs({
+  compact = false,
+  idPrefix = "bank-details",
   bankName,
   bankCode,
   accountNumber,
@@ -127,28 +135,45 @@ export function BankDetailsInputs({
     }
   }, [accountNumber, bankCode]);
 
+  const fieldWrapperClass = compact
+    ? "relative min-w-0 pt-2"
+    : "relative pt-2";
+  const labelClassName = compact
+    ? "absolute left-2 top-0 z-10 bg-white px-1 text-[11px] font-medium leading-4 text-gray-700"
+    : FLOATING_LABEL_CLASS;
+  const inputClassName = compact
+    ? "h-9 px-2.5 !text-xs"
+    : "h-11 !text-xs";
+
   return (
     <>
       {/* Bank Search */}
-      <div className="space-y-2 relative" ref={suggestionsRef}>
-        <Label htmlFor="bankName">Bank Name</Label>
+      <div
+        className={`${fieldWrapperClass} ${suggestions.length > 0 ? "z-50" : ""}`}
+        ref={suggestionsRef}
+      >
+        <Label htmlFor={`${idPrefix}-bank-name`} className={labelClassName}>
+          Bank Name
+        </Label>
         <Input
-          id="bankName"
+          id={`${idPrefix}-bank-name`}
           placeholder="Search bank name..."
           value={searchTerm}
           onChange={(e) => handleSearchChange(e.target.value)}
           autoComplete="off"
+          className={inputClassName}
         />
         {isSearching && (
-          <p className="text-xs text-muted-foreground">Searching...</p>
+          <p className={compact ? "text-[11px] text-muted-foreground" : "text-xs text-muted-foreground"}>Searching...</p>
         )}
         {suggestions.length > 0 && (
-          <div className="absolute z-10 w-full bg-white border rounded-md shadow-md max-h-48 overflow-y-auto mt-1">
+          <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-md border bg-white shadow-md">
             {suggestions.map((bank) => (
               <button
                 key={bank.code}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                title={bank.name}
+                className={`block w-full truncate bg-white px-2.5 py-2 text-left hover:bg-gray-100 ${compact ? "text-[11px]" : "text-xs"}`}
                 onClick={() => handleBankSelect(bank)}
               >
                 {bank.name}
@@ -156,48 +181,85 @@ export function BankDetailsInputs({
             ))}
           </div>
         )}
-        {bankCode && (
+        {bankCode && !compact && (
           <p className="text-xs text-muted-foreground">Code: {bankCode}</p>
         )}
       </div>
 
       {/* Account Number */}
-      <div className="space-y-2">
-        <Label htmlFor="accountNumber">Account Number</Label>
-        <Input
-          id="accountNumber"
-          name="accountNumber"
-          placeholder="Enter 10-digit account number"
-          value={accountNumber}
-          onChange={(e) => {
-            if (e.target.value.length <= 10) {
-              onAccountNumberChange(e.target.value);
-              setResolveError("");
-            }
-          }}
-        />
+      <div className={fieldWrapperClass}>
+        <Label htmlFor={`${idPrefix}-account-number`} className={labelClassName}>
+          Account Number
+        </Label>
+        <div className="relative">
+          <Input
+            id={`${idPrefix}-account-number`}
+            name="accountNumber"
+            inputMode="numeric"
+            placeholder="Enter 10-digit account number"
+            value={accountNumber}
+            onChange={(e) => {
+              if (e.target.value.length <= 10) {
+                onAccountNumberChange(e.target.value);
+                setResolveError("");
+              }
+            }}
+            className={`${inputClassName} ${compact && isResolving ? "pr-8" : ""}`}
+          />
+          {compact && isResolving && (
+            <span
+              role="status"
+              className="absolute inset-y-0 right-2 flex items-center text-blue-500"
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              <span className="sr-only">Verifying account details</span>
+            </span>
+          )}
+        </div>
+        {compact && resolveError && (
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <p className="text-[11px] leading-4 text-red-500">{resolveError}</p>
+            <button
+              type="button"
+              onClick={handleResolve}
+              className="shrink-0 text-[11px] font-medium text-blue-500 hover:underline"
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Account Name (auto-resolved) */}
-      <div className="space-y-2">
-        <Label htmlFor="accountName">Account Name</Label>
-        <div className="flex gap-2">
-          <Input
-            id="accountName"
-            name="accountName"
-            placeholder={isResolving ? "Resolving..." : "Auto-filled after resolve"}
-            value={accountName}
-            readOnly
-            className="bg-muted"
-          />
-          {bankCode && accountNumber.length === 10 && !accountName && !isResolving && (
-            <Button type="button" variant="outline" size="sm" onClick={handleResolve}>
-              Resolve
-            </Button>
-          )}
+      {!compact && (
+        <div className={fieldWrapperClass}>
+          <Label htmlFor={`${idPrefix}-account-name`} className={labelClassName}>
+            Account Name
+          </Label>
+          <div className="flex gap-2">
+            <Input
+              id={`${idPrefix}-account-name`}
+              name="accountName"
+              placeholder={isResolving ? "Resolving..." : "Auto-filled after resolve"}
+              value={accountName}
+              readOnly
+              className={`${inputClassName} bg-muted`}
+            />
+            {bankCode && accountNumber.length === 10 && !accountName && !isResolving && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResolve}
+                className="text-xs"
+              >
+                Resolve
+              </Button>
+            )}
+          </div>
+          {resolveError && <p className="text-xs text-red-500">{resolveError}</p>}
         </div>
-        {resolveError && <p className="text-xs text-red-500">{resolveError}</p>}
-      </div>
+      )}
     </>
   );
 }

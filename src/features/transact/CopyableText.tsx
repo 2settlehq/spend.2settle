@@ -28,6 +28,7 @@ export const CopyableText: React.FC<{
   isWallet?: boolean;
   paymentType?: string;
   lastAssignedTime?: Date | string | number;
+  embedded?: boolean;
 }> = ({
   text,
   label,
@@ -35,6 +36,7 @@ export const CopyableText: React.FC<{
   isWallet = false,
   paymentType,
   lastAssignedTime,
+  embedded = false,
 }) => {
   const [isCopied, setIsCopied] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
@@ -251,20 +253,20 @@ export const CopyableText: React.FC<{
     switch (currentStatus) {
       case "pending":
         return timeLeft < "02:01" || isExpired
-          ? "text-red-500 animate-pulse font-bold"
-          : "text-green-500";
+          ? "text-xs text-red-500 animate-pulse font-bold"
+          : "text-xs text-green-500";
       case "confirming":
       case "confirmed":
       case "settling":
-        return "text-blue-600 font-bold";
+        return "text-xs text-blue-600 font-bold";
       case "settled":
-        return "text-green-600 font-bold";
+        return "text-xs text-green-600 font-bold";
       case "expired":
       case "failed":
       case "settlement_reversed":
-        return "text-red-500 font-bold";
+        return "text-xs text-red-500 font-bold";
       default:
-        return "text-green-500";
+        return "text-xs text-green-500";
     }
   };
 
@@ -347,32 +349,63 @@ export const CopyableText: React.FC<{
   };
 
   return (
-    <div className="flex flex-col items-start space-y-2">
-      {isWallet ? <span>{truncateText(text)}</span> : ""}
-
-      <Button
-        ref={buttonRef}
-        onClick={handleCopy}
-        variant="outline"
-        size="sm"
-        disabled={isWallet && isExpired}
-      >
-        {!isCopied ? (
-          <>
-            <Copy className="w-4 h-4 mr-2" />
-            <span>Copy {label}</span>
-          </>
-        ) : (
-          <>
-            <Check className="w-4 h-4 mr-2" />
-            <span>{label} Copied</span>
-          </>
-        )}
-      </Button>
-      {isWallet && (
-        <span className={getWalletStatusClassName()}>
-          {getWalletStatusText()}
-        </span>
+    <div className="flex min-w-0 flex-col items-start gap-2 text-xs">
+      {embedded ? (
+        <div className="flex w-full min-w-0 items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-gray-900" title={text}>
+            {truncateText(text)}
+          </span>
+          <Button
+            ref={buttonRef}
+            onClick={handleCopy}
+            variant="outline"
+            size="sm"
+            disabled={isWallet && isExpired}
+            aria-label={`Copy ${label}`}
+            className="h-7 shrink-0 px-2 text-[11px]"
+          >
+            {!isCopied ? (
+              <>
+                <Copy className="mr-1.5 h-3.5 w-3.5" />
+                <span>Copy</span>
+              </>
+            ) : (
+              <>
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                <span>Copied</span>
+              </>
+            )}
+          </Button>
+        </div>
+      ) : (
+        <>
+          {isWallet ? <span>{truncateText(text)}</span> : ""}
+          <Button
+            ref={buttonRef}
+            onClick={handleCopy}
+            variant="outline"
+            size="sm"
+            disabled={isWallet && isExpired}
+            className="text-xs"
+          >
+            {!isCopied ? (
+              <>
+                <Copy className="mr-2 h-4 w-4" />
+                <span>Copy {label}</span>
+              </>
+            ) : (
+              <>
+                <Check className="mr-2 h-4 w-4" />
+                <span>{label} Copied</span>
+              </>
+            )}
+          </Button>
+          {isWallet && (
+            <span className={getWalletStatusClassName()}>
+              {getWalletStatusText()}
+            </span>
+          )}
+        </>
       )}
       <Dialog
         open={isDialogOpen}

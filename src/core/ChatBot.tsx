@@ -45,7 +45,7 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
       groupedMessages={groupedMessages}
       loading={loading}
       dateSeperatorBadge={(dateString) => (
-        <li className="flex justify-center py-1 text-xs">
+        <li className="flex justify-center py-1 text-[10px]">
           <span className="px-3 py-1">{dateString}</span>
         </li>
       )}
@@ -62,13 +62,13 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     <ErrorBoundary>
       {isMobile ? (
         <div
-          className={`${GeistSans.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-white`}
+          className={`${GeistSans.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-white text-sm [&_button]:text-xs [&_input]:text-xs [&_textarea]:text-sm`}
         >
           {layout}
         </div>
       ) : (
         <div
-          className={`${GeistSans.className} fixed bottom-24 right-8 flex h-[min(560px,calc(100dvh-14rem))] w-[min(440px,calc(100vw-4rem))] min-h-0 flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl`}
+          className={`${GeistSans.className} fixed bottom-24 right-8 flex h-[min(560px,calc(100dvh-14rem))] w-[min(440px,calc(100vw-4rem))] min-h-0 flex-col overflow-hidden rounded-[2rem] bg-white text-sm shadow-2xl [&_button]:text-xs [&_input]:text-xs [&_textarea]:text-sm`}
         >
           {layout}
         </div>
