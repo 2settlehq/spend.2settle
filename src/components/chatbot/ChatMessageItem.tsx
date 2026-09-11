@@ -5,43 +5,60 @@ import { MessageType } from "stores/chatStore";
 import { renderMessageContent } from "@/utils/renderMessageContent";
 interface Props {
   msg: MessageType;
-  dateString: string;
-  index: number;
 }
 
-const ChatMessageItem = ({ msg, dateString, index }: Props) => {
+const ChatMessageItem = ({ msg }: Props) => {
+  const isStructuredComponent =
+    msg.intent?.kind === "component" &&
+    [
+      "TransferForm",
+      "PaymentDetails",
+      "GiftForm",
+      "RequestPaymentForm",
+      "ClaimGiftForm",
+      "FulfillRequestForm",
+      "ReportForm",
+    ].includes(msg.intent.name);
+
   return (
     <li
-      key={`${dateString}-${index}`}
       className={`flex ${
         msg.type === "incoming" ? "items-start" : "justify-end"
       }`}
     >
       {msg.type === "incoming" && (
-        <span className="flex-shrink-0 w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-4 bg-white rounded self-end">
+        <span className="mr-3 h-9 w-9 flex-shrink-0 self-end rounded bg-white">
           <Image
-            src="/wale/waaa.png"
+            src="/wale/wale-chat-icon.png"
             alt="Avatar"
-            width={32}
-            height={32}
-            className="rounded"
+            width={36}
+            height={36}
+            className="h-full w-full rounded object-cover"
           />
         </span>
       )}
 
-      <div className="flex flex-col max-w-[75%]">
+      <div
+        className={`flex flex-col ${
+          isStructuredComponent ? "min-w-0 flex-1" : "max-w-[78%]"
+        }`}
+      >
         <div
-          className={`p-2 md:p-3 rounded-lg ${
-            msg.type === "incoming"
-              ? "bg-gray-200 text-black rounded-bl-none"
-              : "bg-blue-500 text-white rounded-br-none"
-          }`}
+          className={
+            isStructuredComponent
+              ? "leading-relaxed text-black"
+              : `rounded-2xl px-4 py-3 leading-relaxed ${
+                  msg.type === "incoming"
+                    ? "rounded-bl-none bg-gray-200 text-black"
+                    : "rounded-br-none bg-blue-500 text-white"
+                }`
+          }
         >
           {renderMessageContent(msg)}
         </div>
 
         <span
-          className={`text-xs text-gray-500 mt-1 ${
+          className={`mt-1 px-1 text-[10px] text-gray-500 ${
             msg.type === "incoming" ? "self-end" : "self-start"
           }`}
         >

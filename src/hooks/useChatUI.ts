@@ -7,7 +7,13 @@ export function useChatUI() {
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const chatbox = chatboxRef.current;
+      if (!chatbox) return;
+
+      chatbox.scrollTo({
+        top: chatbox.scrollHeight,
+        behavior: "smooth",
+      });
     });
   }, []);
 

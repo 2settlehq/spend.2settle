@@ -229,7 +229,9 @@ const ConfirmAndProceedButton = () => {
       </Button>
 
       {/* error state */}
-      {walletFetchError && <p className="text-red-500">{walletFetchError}</p>}
+      {walletFetchError && (
+        <p className="text-xs text-red-500">{walletFetchError}</p>
+      )}
 
       {/* copiable wallet - only show for manual payment flow */}
       {activeWallet && !connectedWallet && (
@@ -243,7 +245,7 @@ const ConfirmAndProceedButton = () => {
       )}
       {/* count down - only show for manual payment flow */}
       {showCountdown && !connectedWallet && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <p role="status" className="text-xs text-muted-foreground">
           Address expires in <CountdownTimer expiryTime={expiryTime} />
           {showExpired && "This wallet has expired"}
         </p>

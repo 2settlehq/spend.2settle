@@ -1,4 +1,19 @@
-import { geminiAi } from "@/services/ai/ai-services";
+import {
+  ClaimGiftFormData,
+  FulfillRequestFormData,
+  GemResponseType,
+  GiftFormData,
+  ReportFormData,
+  RequestPaymentFormData,
+  submitClaimGiftForm,
+  submitFulfillRequestForm,
+  submitGiftForm,
+  submitReportForm,
+  submitRequestPaymentForm,
+  submitTransferForm,
+  TransferFormData,
+  geminiAi,
+} from "@/services/ai/ai-services";
 import useChatStore, { MessageType } from "stores/chatStore";
 
 type CopyableReplyItem = {
@@ -118,6 +133,165 @@ const mergeCopyableItems = (
   });
 };
 
+const getOrCreateSessionId = () => {
+  let sessionId = window.localStorage.getItem("transactionID");
+
+  if (!sessionId) {
+    sessionId = Math.floor(100000 + Math.random() * 900000).toString();
+    window.localStorage.setItem("transactionID", sessionId);
+  }
+
+  return sessionId;
+};
+
+const buildAiReplyMessages = (reply: GemResponseType): MessageType[] => {
+  const copyableItems = mergeCopyableItems(
+    reply.copyableItems,
+    getCopyableReplyItems(reply.reply),
+    { suppressGiftClaimIds: reply.claimGiftMode === true },
+  ).map((item) => ({
+    ...item,
+    isWallet:
+      item.isWallet || item.label.toLowerCase() === "wallet address",
+  }));
+  const walletItem = copyableItems.find(
+    (item) => item.isWallet,
+  );
+  const summary = stripTrailingWalletAddressLine(reply.reply);
+
+  if (copyableItems.length > 0) {
+    const walletExpiryTime = walletItem?.expiresAt
+      ? new Date(walletItem.expiresAt)
+      : new Date(Date.now() + 30 * 60 * 1000);
+
+    return [{
+      type: "incoming",
+      intent: {
+        kind: "component",
+        name: "PaymentDetails",
+        props: {
+          summary,
+          items: copyableItems,
+          expiryTime: walletItem ? walletExpiryTime.toISOString() : undefined,
+          walletReference: walletItem?.reference,
+        },
+        persist: true,
+      },
+      timestamp: new Date(),
+    }];
+  }
+
+  return [{
+    type: "incoming",
+    content: <span>{summary}</span>,
+    timestamp: new Date(),
+  }];
+};
+
+const addAiReplyToChat = (reply: GemResponseType) => {
+  const { addMessages } = useChatStore.getState();
+  addMessages(buildAiReplyMessages(reply));
+};
+
+export const handleTransferFormSubmission = async (
+  formData: TransferFormData,
+) => {
+  const { addMessages, setLoading } = useChatStore.getState();
+  setLoading(true);
+
+  try {
+    const reply = await submitTransferForm(formData, getOrCreateSessionId());
+    addAiReplyToChat(reply);
+    return true;
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.error ??
+      error?.response?.data?.message ??
+      error?.message ??
+      "Transfer could not be created. Please try again.";
+    addMessages([
+      {
+        type: "incoming",
+        content: <span>{message}</span>,
+        timestamp: new Date(),
+      },
+    ]);
+    return false;
+  } finally {
+    setLoading(false);
+  }
+};
+
+const submitChatWorkflow = async <T,>(
+  formData: T,
+  submitter: (form: T, sessionId: string) => Promise<GemResponseType>,
+  fallbackMessage: string,
+) => {
+  const { addMessages, setLoading } = useChatStore.getState();
+  setLoading(true);
+
+  try {
+    const reply = await submitter(formData, getOrCreateSessionId());
+    addAiReplyToChat(reply);
+    return true;
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.error ??
+      error?.response?.data?.message ??
+      error?.message ??
+      fallbackMessage;
+    addMessages([
+      {
+        type: "incoming",
+        content: <span>{message}</span>,
+        timestamp: new Date(),
+      },
+    ]);
+    return false;
+  } finally {
+    setLoading(false);
+  }
+};
+
+export const handleGiftFormSubmission = (formData: GiftFormData) =>
+  submitChatWorkflow(
+    formData,
+    submitGiftForm,
+    "Gift could not be created. Please try again.",
+  );
+
+export const handleRequestPaymentFormSubmission = (
+  formData: RequestPaymentFormData,
+) =>
+  submitChatWorkflow(
+    formData,
+    submitRequestPaymentForm,
+    "Payment request could not be created. Please try again.",
+  );
+
+export const handleClaimGiftFormSubmission = (formData: ClaimGiftFormData) =>
+  submitChatWorkflow(
+    formData,
+    submitClaimGiftForm,
+    "Gift could not be claimed. Please try again.",
+  );
+
+export const handleFulfillRequestFormSubmission = (
+  formData: FulfillRequestFormData,
+) =>
+  submitChatWorkflow(
+    formData,
+    submitFulfillRequestForm,
+    "Payment request could not be fulfilled. Please try again.",
+  );
+
+export const handleReportFormSubmission = (formData: ReportFormData) =>
+  submitChatWorkflow(
+    formData,
+    submitReportForm,
+    "Report could not be submitted. Please try again.",
+  );
+
 export const handleAiChat = async (chatInput?: string) => {
   const { addMessages, setStreamingMessage } = useChatStore.getState();
   const getErrorMessage = (error: any) => {
@@ -162,81 +336,61 @@ export const handleAiChat = async (chatInput?: string) => {
       setStreamingMessage(stripTrailingWalletAddressLine(accumulatedText));
     });
     console.log("this is the response from backend", reply.reply);
-    const copyableItems = mergeCopyableItems(
-      reply.copyableItems,
-      getCopyableReplyItems(reply.reply),
-      { suppressGiftClaimIds: reply.claimGiftMode === true },
-    );
-    const shouldShowTransferTimeNotice = copyableItems.some(
-      (item) => item.isWallet || item.label.toLowerCase() === "wallet address",
-    );
-    const walletItem = copyableItems.find(
-      (item) => item.isWallet || item.label.toLowerCase() === "wallet address",
-    );
-    const walletExpiryTime = walletItem?.expiresAt
-      ? new Date(walletItem.expiresAt)
-      : new Date(Date.now() + 30 * 60 * 1000);
 
-    const incomingMessages: MessageType[] = [
-      {
-        type: "incoming",
-        content: <span>{stripTrailingWalletAddressLine(reply.reply)}</span>,
-        timestamp: new Date(),
+    const workflowForm = [
+      reply.showTransferForm && {
+        name: "TransferForm",
+        initialValues: reply.transferFormDefaults,
+        formId: reply.transferFormId,
       },
-      ...(shouldShowTransferTimeNotice
-        ? [
-            {
-              type: "incoming",
-              content: (
-                <div className="flex flex-col items-center">
-                  <p className="mb-4">
-                    <b>Please Note</b>
-                    <br />
-                    Make sure you complete the transfer within <b>30 mins</b>
-                  </p>
-                </div>
-              ),
-              timestamp: new Date(),
-            },
-          ]
-        : []),
-      ...copyableItems.map((item) => ({
-        type: "incoming",
-        intent: {
-          kind: "component" as const,
-          name: "CopyableText",
-          props: {
-            text: item.text,
-            label: item.label,
-            isWallet: item.isWallet,
-            reference: item.reference,
-            paymentType: item.paymentType,
-            lastAssignedTime: item.expiresAt ? new Date(item.expiresAt) : undefined,
-          },
-          persist: true,
-        },
-        timestamp: new Date(),
-      })),
-      ...(walletItem
-        ? [
-            {
-              type: "incoming",
-              intent: {
-                kind: "component" as const,
-                name: "CountdownTimer",
-                props: {
-                  expiryTime: walletExpiryTime,
-                  reference: walletItem.reference,
-                },
-                persist: true,
-              },
-              timestamp: new Date(),
-            },
-          ]
-        : []),
-    ];
+      reply.showGiftForm && {
+        name: "GiftForm",
+        initialValues: reply.giftFormDefaults,
+        formId: reply.giftFormId,
+      },
+      reply.showRequestPaymentForm && {
+        name: "RequestPaymentForm",
+        initialValues: reply.requestPaymentFormDefaults,
+        formId: reply.requestPaymentFormId,
+      },
+      reply.showClaimGiftForm && {
+        name: "ClaimGiftForm",
+        initialValues: reply.claimGiftFormDefaults,
+        formId: reply.claimGiftFormId,
+      },
+      reply.showFulfillRequestForm && {
+        name: "FulfillRequestForm",
+        initialValues: reply.fulfillRequestFormDefaults,
+        formId: reply.fulfillRequestFormId,
+      },
+      reply.showReportForm && {
+        name: "ReportForm",
+        initialValues: reply.reportFormDefaults,
+        formId: reply.reportFormId,
+      },
+    ].find(Boolean);
 
-    addMessages?.(incomingMessages);
+    if (workflowForm) {
+      addMessages([
+        {
+          type: "incoming",
+          content: <span>{reply.reply}</span>,
+          intent: {
+            kind: "component",
+            name: workflowForm.name,
+            props: {
+              initialValues: workflowForm.initialValues,
+              formId: workflowForm.formId,
+            },
+            persist: true,
+          },
+          timestamp: new Date(),
+        },
+      ]);
+      return;
+    }
+
+    addMessages?.(buildAiReplyMessages(reply));
   } catch (err) {
     console.error("There was an error from backend", err);
     const errorMessage = getErrorMessage(err);

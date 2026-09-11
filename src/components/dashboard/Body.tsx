@@ -161,15 +161,34 @@ export default function Body() {
     const launcherSize =
       isMobile || isTab ? "h-16 w-16" : isDeskTop ? "h-28 w-28" : "h-24 w-24";
 
+    if (isOpen && isMobile) return null;
+
     return (
       <Button
-        className={`fixed bottom-8 right-8 ${
-          isOpen ? "hidden" : launcherSize
-        } chat-launcher-float rounded-full bg-transparent p-0 transition-transform transform hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 z-50 shadow-none overflow-visible`}
+        className={`fixed right-8 z-50 overflow-visible rounded-full p-0 transition-transform focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 ${
+          isOpen
+            ? "bottom-4 h-[72px] w-[72px] bg-blue-500 shadow-lg hover:bg-blue-500"
+            : `bottom-8 ${launcherSize} chat-launcher-float transform bg-transparent shadow-none hover:bg-transparent`
+        }`}
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? "Close chat" : "Open chat"}
       >
-        {!isOpen && (
+        {isOpen ? (
+          <svg
+            aria-hidden="true"
+            className="h-9 w-9 text-white"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.25}
+              d="m5 9 7 7 7-7"
+            />
+          </svg>
+        ) : (
           <Image
             src="/chat-icon.png"
             alt="Open chat"

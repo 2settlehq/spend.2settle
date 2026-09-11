@@ -8,6 +8,7 @@ import { useChatState } from "@/hooks/chatbot/useChatState";
 import { useChatUI } from "@/hooks/useChatUI";
 import { useGroupedMessages } from "@/hooks/useGroupedMessages";
 import { ChatBotProps } from "@/types/chatbot_types";
+import { GeistSans } from "geist/font/sans";
 import { useEffect } from "react";
 import useChatStore from "stores/chatStore";
 
@@ -41,10 +42,13 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
       chatInput={chatInput}
       onChange={(e) => setChatInput(e.target.value)}
       onSubmit={handleConversation}
-      chatMessages={chatMessages}
       groupedMessages={groupedMessages}
       loading={loading}
-      dateSeperatorBadge={(dateString) => <li>{dateString}</li>}
+      dateSeperatorBadge={(dateString) => (
+        <li className="flex justify-center py-1 text-[10px]">
+          <span className="px-3 py-1">{dateString}</span>
+        </li>
+      )}
       messagesEndRef={messagesEndRef}
       chatboxRef={chatboxRef}
       showDateDropdown={true}
@@ -57,16 +61,14 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
   return (
     <ErrorBoundary>
       {isMobile ? (
-        <div className="fixed inset-0 flex flex-col bg-white">{layout}</div>
+        <div
+          className={`${GeistSans.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-white text-sm [&_button]:text-xs [&_input]:text-xs [&_textarea]:text-sm`}
+        >
+          {layout}
+        </div>
       ) : (
         <div
-          ref={chatboxRef}
-          className={`fixed ${
-            isMobile
-              ? "inset-0 top-10"
-              : "right-8 bottom-24 w-10/12 md:w-7/12 lg:w-6/12"
-          } bg-white rounded-lg shadow-lg overflow-hidden flex flex-col`}
-          style={{ height: isMobile ? "150%" : "80vh" }}
+          className={`${GeistSans.className} fixed bottom-24 right-8 flex h-[min(560px,calc(100dvh-14rem))] w-[min(440px,calc(100vw-4rem))] min-h-0 flex-col overflow-hidden rounded-[2rem] bg-white text-sm shadow-2xl [&_button]:text-xs [&_input]:text-xs [&_textarea]:text-sm`}
         >
           {layout}
         </div>
