@@ -19,13 +19,12 @@ export const useMediaQuery = (query: string) => {
 
   useEffect(() => {
     const media = window.matchMedia(query);
-    if (media.matches !== matches) {
-      setMatches(media.matches);
-    }
-    const listener = () => setMatches(media.matches);
-    window.addEventListener("resize", listener);
-    return () => window.removeEventListener("resize", listener);
-  }, [matches, query]);
+    const listener = (event: MediaQueryListEvent) => setMatches(event.matches);
+
+    setMatches(media.matches);
+    media.addEventListener("change", listener);
+    return () => media.removeEventListener("change", listener);
+  }, [query]);
 
   return matches;
 };
@@ -47,7 +46,7 @@ const formatRateUpdatedAt = (timestamp: number | string | null | undefined) => {
 export default function Body() {
   const [isOpen, setIsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
-  const isMobile = useMediaQuery("(max-width: 425px)");
+  const isMobile = useMediaQuery("(max-width: 767px)");
   const isTab = useMediaQuery("(max-width: 768px)");
   const isDeskTop = useMediaQuery("(max-width: 1440px)");
 

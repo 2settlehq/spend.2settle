@@ -23,10 +23,10 @@ const ChatMessages = ({
 
   return (
     <main
-      className="min-h-0 flex-1 overflow-y-auto bg-white overscroll-contain"
+      className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-white overscroll-contain"
       ref={chatboxRef}
     >
-      <ul className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
+      <ul className="min-w-0 space-y-3 px-3 py-4 sm:px-5 sm:py-5">
         {Object.entries(groupedMessages).map(([dateString, messages]) => (
           <React.Fragment key={dateString}>
             {dateSeperatorBadge(dateString)}

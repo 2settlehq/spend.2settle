@@ -37,6 +37,32 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
 
   useEffect(scrollToBottom, [chatMessages, scrollToBottom]);
 
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const root = document.documentElement;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousRootOverflow = root.style.overflow;
+    const updateViewportHeight = () => {
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      root.style.setProperty("--chat-viewport-height", `${height}px`);
+    };
+
+    document.body.style.overflow = "hidden";
+    root.style.overflow = "hidden";
+    updateViewportHeight();
+    window.visualViewport?.addEventListener("resize", updateViewportHeight);
+    window.addEventListener("orientationchange", updateViewportHeight);
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      root.style.overflow = previousRootOverflow;
+      root.style.removeProperty("--chat-viewport-height");
+      window.visualViewport?.removeEventListener("resize", updateViewportHeight);
+      window.removeEventListener("orientationchange", updateViewportHeight);
+    };
+  }, [isMobile]);
+
   const layout = (
     <ChatLayout
       chatInput={chatInput}
@@ -62,7 +88,7 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     <ErrorBoundary>
       {isMobile ? (
         <div
-          className={`${GeistSans.className} fixed inset-0 flex min-h-0 flex-col overflow-hidden bg-white text-sm [&_button]:text-xs [&_input]:text-xs [&_textarea]:text-sm`}
+          className={`${GeistSans.className} fixed left-0 top-0 flex h-[var(--chat-viewport-height,100dvh)] w-full max-w-full min-h-0 flex-col overflow-hidden bg-white text-sm [&_input]:text-base [&_textarea]:text-base md:[&_input]:text-xs md:[&_textarea]:text-sm`}
         >
           {layout}
         </div>
