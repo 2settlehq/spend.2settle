@@ -54,7 +54,7 @@ const FLOATING_LABEL_CLASS =
 const FORM_CLASS =
   "grid w-full grid-cols-2 gap-x-2.5 gap-y-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm";
 const FIELD_CLASS = "relative min-w-0 pt-2";
-const INPUT_CLASS = "h-9 px-2.5 !text-xs";
+const INPUT_CLASS = "h-9 px-2.5 !text-base md:!text-xs";
 
 function useSubmittedState(formId: string | undefined, storagePrefix: string) {
   const [submitted, setSubmitted] = useState(false);
@@ -287,7 +287,7 @@ function PhoneField({
             onNumberChange(event.target.value.replace(/\D/g, "").slice(0, 15))
           }
           placeholder="Phone number"
-          className="h-full min-w-0 flex-1 rounded-none border-0 px-2 !text-xs shadow-none focus-visible:ring-0"
+          className="h-full min-w-0 flex-1 rounded-none border-0 px-2 !text-base shadow-none focus-visible:ring-0 md:!text-xs"
           required
         />
       </div>
@@ -947,7 +947,7 @@ export function ReportForm({
           value={form.description}
           onChange={(event) => update({ description: event.target.value })}
           placeholder="Briefly describe the issue"
-          className="min-h-16 resize-none px-2.5 py-2 !text-xs"
+          className="min-h-16 resize-none px-2.5 py-2 !text-base md:!text-xs"
           required
         />
       </div>

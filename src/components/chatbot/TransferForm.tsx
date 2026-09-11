@@ -309,7 +309,7 @@ export default function TransferForm({
           value={form.amount}
           onChange={(event) => update("amount", event.target.value)}
           placeholder="Enter amount"
-          className="h-9 px-2.5 !text-xs"
+          className="h-9 px-2.5 !text-base md:!text-xs"
           required
         />
       </div>
@@ -440,7 +440,7 @@ export default function TransferForm({
                 )
               }
               placeholder="Phone number"
-              className="h-full min-w-0 flex-1 rounded-none border-0 px-2 !text-xs shadow-none focus-visible:ring-0"
+              className="h-full min-w-0 flex-1 rounded-none border-0 px-2 !text-base shadow-none focus-visible:ring-0 md:!text-xs"
               required
             />
           </div>

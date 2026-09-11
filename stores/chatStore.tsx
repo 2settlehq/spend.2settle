@@ -35,6 +35,77 @@ const sanitizeSerializedContent = (content: string) => {
     .replace(/\s+/g, " ")
     .trim();
 };
+
+const parseLegacyStructuredReply = (content?: string) => {
+  if (!content) return undefined;
+
+  const templateLiteralMatch = content.match(/\{`([\s\S]*?)`\}/);
+  const candidates = [
+    content.trim(),
+    templateLiteralMatch?.[1],
+    content.replace(/<[^>]+>/g, "").trim(),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed.reply === "string") return parsed;
+    } catch {
+      // This stored message is normal JSX/text rather than a legacy JSON reply.
+    }
+  }
+
+  return undefined;
+};
+
+const getStructuredReplyIntent = (reply: any): MessageIntent | undefined => {
+  if (!reply || typeof reply !== "object") return undefined;
+
+  const form = [
+    reply.showTransferForm && {
+      name: "TransferForm",
+      initialValues: reply.transferFormDefaults,
+      formId: reply.transferFormId,
+    },
+    reply.showGiftForm && {
+      name: "GiftForm",
+      initialValues: reply.giftFormDefaults,
+      formId: reply.giftFormId,
+    },
+    reply.showRequestPaymentForm && {
+      name: "RequestPaymentForm",
+      initialValues: reply.requestPaymentFormDefaults,
+      formId: reply.requestPaymentFormId,
+    },
+    reply.showClaimGiftForm && {
+      name: "ClaimGiftForm",
+      initialValues: reply.claimGiftFormDefaults,
+      formId: reply.claimGiftFormId,
+    },
+    reply.showFulfillRequestForm && {
+      name: "FulfillRequestForm",
+      initialValues: reply.fulfillRequestFormDefaults,
+      formId: reply.fulfillRequestFormId,
+    },
+    reply.showReportForm && {
+      name: "ReportForm",
+      initialValues: reply.reportFormDefaults,
+      formId: reply.reportFormId,
+    },
+  ].find(Boolean);
+
+  return form
+    ? {
+        kind: "component",
+        name: form.name,
+        props: {
+          initialValues: form.initialValues,
+          formId: form.formId,
+        },
+        persist: true,
+      }
+    : undefined;
+};
 const serializeMessage = (msg: MessageType) => ({
   type: msg.type,
   content: sanitizeSerializedContent(elementToJSXString(msg.content)),
@@ -43,10 +114,17 @@ const serializeMessage = (msg: MessageType) => ({
 
 // when desireialing the message, we can have content, intent or both in a message
 const deserializeMessage = (msg: SerializedMessage): MessageType => {
+  const legacyReply =
+    msg.type === "incoming" ? parseLegacyStructuredReply(msg.content) : undefined;
+
   return {
     type: msg.type,
-    content: msg.content ? parse(msg.content) : undefined,
-    intent: msg.intent,
+    content: legacyReply
+      ? <span>{legacyReply.reply}</span>
+      : msg.content
+        ? parse(msg.content)
+        : undefined,
+    intent: msg.intent ?? getStructuredReplyIntent(legacyReply),
     timestamp: new Date(msg.timestamp),
   };
 };
