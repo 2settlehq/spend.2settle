@@ -25,6 +25,10 @@ import {
 } from "@/services/enginePaymentService";
 import { engineGet, enginePost } from "@/lib/settle-client";
 import { chat } from "googleapis/build/src/apis/chat";
+import {
+  isValidInternationalPhoneNumber,
+  normalizeInternationalPhoneNumber,
+} from "@/utils/phoneNumber";
 // at top of the file (outside handler)
 type Sess = Record<string, any>;
 type PaymentType = "transfer" | "gift" | "request" | "report";
@@ -59,7 +63,7 @@ const FIELD_QUESTIONS: Record<string, string> = {
   receiver_name:
     "Please confirm the bank name and account number so I can verify the account name.",
   accountDetailsConfirmed: "",
-  receiver_phoneNumber: "Please enter the recipient phone number.",
+  receiver_phoneNumber: "Please enter the phone number.",
   id: "Please enter the gift id.",
   complaintType:
     "What type of report is this: stolen funds, fraud, or track transaction?",
@@ -85,7 +89,8 @@ interface ReportResponse {
 
 interface CreatePaymentInput {
   type: "transfer" | "gift";
-  fiatAmount: number;
+  fiatAmount?: number;
+  cryptoAmount?: number;
   fiatCurrency?: string;
   crypto?: string;
   network?: string;
@@ -132,6 +137,76 @@ interface FulfillRequestInput {
 interface ClaimGiftInput {
   bankCode: string;
   accountNumber: string;
+}
+
+interface TransferFormPayload {
+  crypto: string;
+  network: string;
+  estimation: string;
+  amount: string;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName?: string;
+  accountDetailsConfirmed: boolean;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+interface GiftFormPayload {
+  crypto: string;
+  network: string;
+  estimation: string;
+  amount: string;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+interface BankFormPayload {
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName?: string;
+  accountDetailsConfirmed: boolean;
+}
+
+interface RequestPaymentFormPayload extends BankFormPayload {
+  amount: string;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+interface ClaimGiftFormPayload extends BankFormPayload {
+  giftId: string;
+}
+
+interface FulfillRequestFormPayload {
+  requestId: string;
+  crypto: string;
+  network: string;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+interface ReportFormPayload {
+  complaintType: string;
+  name: string;
+  phoneCountry: string;
+  phoneNumber: string;
+  walletAddress: string;
+  fraudsterWalletAddress?: string;
+  description: string;
+}
+
+interface ResolveBankResponse {
+  data: {
+    account_name?: string;
+    account_number?: string;
+    bank_code?: string;
+    accountName?: string;
+    accountNumber?: string;
+    bankCode?: string;
+  };
 }
 
 declare global {
@@ -296,6 +371,34 @@ function looksLikeCreateGiftRequest(phrase: string, currentSession: Sess = {}) {
       /\b(?:creat(?:e|ing)|send(?:ing)?|mak(?:e|ing)|generat(?:e|ing))(?:\s+(?:one|it))?\s+instead\b/i.test(
         phrase,
       ))
+  );
+}
+
+function looksLikeTransferRequest(phrase: string) {
+  if (
+    /\b(?:gift|request|claim|report|complain|track|status|check)\b/i.test(
+      phrase,
+    )
+  ) {
+    return false;
+  }
+
+  return /\b(?:transact|transfer|send|sell|withdraw|cash\s*out|pay)\b/i.test(
+    phrase,
+  );
+}
+
+function looksLikeFulfillRequestRequest(phrase: string) {
+  return /\b(?:fulfill|pay|settle|complete)\s+(?:a\s+|the\s+)?(?:payment\s+)?request\b/i.test(
+    phrase,
+  );
+}
+
+function looksLikeCreatePaymentRequest(phrase: string) {
+  if (looksLikeFulfillRequestRequest(phrase)) return false;
+
+  return /\b(?:create|make|send|generate|ask|request)(?:ing)?\s+(?:a\s+|for\s+|the\s+)?(?:payment\s+)?request\b|\brequest(?:ing)?\s+(?:a\s+)?payment\b/i.test(
+    phrase,
   );
 }
 
@@ -811,7 +914,10 @@ function getMissingFields(updatedSession: Sess) {
   if (
     !isRequestFulfillment &&
     !isClaimGift &&
-    !/^\d{11}$/.test(String(updatedSession.receiver_phoneNumber ?? ""))
+    !/^\d{11}$/.test(String(updatedSession.receiver_phoneNumber ?? "")) &&
+    !isValidInternationalPhoneNumber(
+      String(updatedSession.receiver_phoneNumber ?? ""),
+    )
   ) {
     missing.push("receiver_phoneNumber");
   }
@@ -945,6 +1051,20 @@ function getApiErrorResponse(error: any) {
   };
 }
 
+function getFormErrorResponse(error: any) {
+  if (error?.response) return getApiErrorResponse(error);
+
+  return {
+    status: 400,
+    body: {
+      error:
+        error instanceof Error
+          ? error.message
+          : "The submitted details are invalid.",
+    },
+  };
+}
+
 function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   const previousType = currentSession.type;
   const nextType = incomingData.type;
@@ -959,11 +1079,16 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     nextType === "gift" &&
     incomingData.claimGiftMode === false &&
     currentSession.claimGiftMode === true;
+  const switchingRequestMode =
+    nextType === "request" &&
+    typeof incomingData.requestFulfillment === "boolean" &&
+    incomingData.requestFulfillment !== currentSession.requestFulfillment;
 
   if (
     !switchingType &&
     !switchingToClaimGift &&
-    !switchingFromClaimGiftToCreate
+    !switchingFromClaimGiftToCreate &&
+    !switchingRequestMode
   ) {
     return currentSession;
   }
@@ -983,6 +1108,18 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
     totalcrypto,
     wallet_address,
     amountString,
+    transferFormMode,
+    giftFormMode,
+    requestPaymentFormMode,
+    claimGiftFormMode,
+    fulfillRequestFormMode,
+    reportFormMode,
+    transferFormId,
+    giftFormId,
+    requestPaymentFormId,
+    claimGiftFormId,
+    fulfillRequestFormId,
+    reportFormId,
     ...rest
   } = currentSession;
 
@@ -1021,6 +1158,218 @@ function resetSessionForFlowChange(currentSession: Sess, incomingData: Sess) {
   return rest;
 }
 
+function normalizeTransferForm(
+  transferForm: TransferFormPayload,
+): TransferFormPayload {
+  const crypto = normalizeCryptoAsset(transferForm?.crypto);
+  const estimation = String(transferForm?.estimation ?? "").toLowerCase();
+  const amount = String(transferForm?.amount ?? "").replace(/[^\d.]/g, "");
+  const bankName = String(transferForm?.bankName ?? "").trim();
+  const bankCode = String(transferForm?.bankCode ?? "").trim();
+  const accountNumber = String(transferForm?.accountNumber ?? "").replace(
+    /\D/g,
+    "",
+  );
+  const phoneCountry = String(
+    transferForm?.phoneCountry ?? "NG",
+  ).toUpperCase();
+  const phoneNumber = normalizeInternationalPhoneNumber(
+    phoneCountry,
+    String(transferForm?.phoneNumber ?? ""),
+  );
+  let network = String(transferForm?.network ?? "").toUpperCase();
+
+  if (crypto === "BTC") network = "BTC";
+  if (crypto === "ETH") network = "ETH";
+  if (crypto === "BNB") network = "BEP20";
+  if (crypto === "TRON") network = "TRC20";
+
+  if (!crypto || !SUPPORTED_CRYPTO.has(crypto)) {
+    throw new Error("Select a supported crypto asset.");
+  }
+
+  if (crypto === "USDT" && !SUPPORTED_USDT_NETWORKS.has(network)) {
+    throw new Error("Select ERC20, TRC20, or BEP20 for USDT.");
+  }
+
+  if (!SUPPORTED_ESTIMATIONS.has(estimation)) {
+    throw new Error("Select a valid estimation type.");
+  }
+
+  if (!isValidAmount(amount)) {
+    throw new Error("Enter a valid amount.");
+  }
+
+  if (!bankName || !bankCode) {
+    throw new Error("Select a bank from the bank search results.");
+  }
+
+  if (!/^\d{10}$/.test(accountNumber)) {
+    throw new Error("Enter a valid 10-digit account number.");
+  }
+
+  if (!phoneNumber) {
+    throw new Error("Enter a valid phone number for the selected country.");
+  }
+
+  if (!transferForm?.accountName?.trim()) {
+    throw new Error("Wait for the account name to be verified.");
+  }
+
+  if (transferForm?.accountDetailsConfirmed !== true) {
+    throw new Error("Confirm that the resolved account details are correct.");
+  }
+
+  return {
+    crypto,
+    network,
+    estimation,
+    amount,
+    bankName,
+    bankCode,
+    accountNumber,
+    accountName: String(transferForm?.accountName ?? "").trim(),
+    accountDetailsConfirmed: true,
+    phoneCountry,
+    phoneNumber,
+  };
+}
+
+function normalizeCryptoFields(input: {
+  crypto?: string;
+  network?: string;
+}) {
+  const cryptoAsset = normalizeCryptoAsset(input.crypto);
+  let network = String(input.network ?? "").trim().toUpperCase();
+
+  if (cryptoAsset === "BTC") network = "BTC";
+  if (cryptoAsset === "ETH") network = "ETH";
+  if (cryptoAsset === "BNB") network = "BEP20";
+  if (cryptoAsset === "TRON") network = "TRC20";
+
+  if (!cryptoAsset || !SUPPORTED_CRYPTO.has(cryptoAsset)) {
+    throw new Error("Select a supported crypto asset.");
+  }
+  if (cryptoAsset === "USDT" && !SUPPORTED_USDT_NETWORKS.has(network)) {
+    throw new Error("Select ERC20, TRC20, or BEP20 for USDT.");
+  }
+
+  return { crypto: cryptoAsset, network };
+}
+
+function normalizePhoneFields(input: {
+  phoneCountry?: string;
+  phoneNumber?: string;
+}) {
+  const phoneCountry = String(input.phoneCountry ?? "NG").toUpperCase();
+  const phoneNumber = normalizeInternationalPhoneNumber(
+    phoneCountry,
+    String(input.phoneNumber ?? ""),
+  );
+
+  if (!phoneNumber) {
+    throw new Error("Enter a valid phone number for the selected country.");
+  }
+
+  return { phoneCountry, phoneNumber };
+}
+
+function normalizeReference(value: unknown, label: string) {
+  const reference = String(value ?? "").trim().toUpperCase();
+  if (!/^2S-[A-Z0-9]{6}$/.test(reference)) {
+    throw new Error(`Enter a valid ${label}, for example 2S-HKVT5E.`);
+  }
+  return reference;
+}
+
+function normalizeBankForm(form: BankFormPayload) {
+  const bankName = String(form?.bankName ?? "").trim();
+  const bankCode = String(form?.bankCode ?? "").trim();
+  const accountNumber = String(form?.accountNumber ?? "").replace(/\D/g, "");
+  const accountName = String(form?.accountName ?? "").replace(/\s+/g, " ").trim();
+
+  if (!bankName || !bankCode) {
+    throw new Error("Select a bank from the bank search results.");
+  }
+  if (!/^\d{10}$/.test(accountNumber)) {
+    throw new Error("Enter a valid 10-digit account number.");
+  }
+  if (!accountName) {
+    throw new Error("Wait for the account name to be verified.");
+  }
+  if (form?.accountDetailsConfirmed !== true) {
+    throw new Error("Confirm that the resolved account details are correct.");
+  }
+
+  return {
+    bankName,
+    bankCode,
+    accountNumber,
+    accountName,
+    accountDetailsConfirmed: true,
+  };
+}
+
+async function verifyBankForm(form: BankFormPayload) {
+  const normalized = normalizeBankForm(form);
+  const bankDetails = await enginePost<ResolveBankResponse>("/banks/resolve", {
+    bank_code: normalized.bankCode,
+    account_number: normalized.accountNumber,
+  });
+  const resolvedAccountName =
+    bankDetails.data?.account_name ?? bankDetails.data?.accountName;
+  const resolvedBankCode = bankDetails.data?.bank_code ?? bankDetails.data?.bankCode;
+
+  if (!resolvedAccountName) {
+    throw new Error("The account name could not be verified. Check the details.");
+  }
+  if (
+    normalized.accountName.toLowerCase() !==
+    resolvedAccountName.replace(/\s+/g, " ").trim().toLowerCase()
+  ) {
+    throw new Error(
+      "The resolved account details changed. Please verify and confirm them again.",
+    );
+  }
+
+  return {
+    ...normalized,
+    bankCode: resolvedBankCode || normalized.bankCode,
+    accountName: resolvedAccountName,
+  };
+}
+
+function paymentCopyableItems(
+  payment: {
+    depositAddress?: string | null;
+    reference: string;
+    expiresAt?: string | null;
+  },
+  paymentType: string,
+  idLabel: string,
+) {
+  return [
+    ...(payment.depositAddress
+      ? [
+          {
+            label: "Wallet Address",
+            text: payment.depositAddress,
+            isWallet: true,
+            reference: payment.reference,
+            paymentType,
+            expiresAt: payment.expiresAt,
+          },
+        ]
+      : []),
+    {
+      label: idLabel,
+      text: payment.reference,
+      reference: payment.reference,
+      paymentType,
+    },
+  ];
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -1028,15 +1377,34 @@ export default async function handler(
   if (req.method !== "POST")
     return res.status(405).json({ message: "Only POST allowed" });
 
-  const { messageText, chatId } = req.body;
+  const {
+    messageText,
+    chatId,
+    transferForm,
+    giftForm,
+    requestPaymentForm,
+    claimGiftForm,
+    fulfillRequestForm,
+    reportForm,
+  } = req.body;
   console.log("the message.......", messageText);
   console.log("the chatId.......", chatId);
   // check for chatid
   if (!chatId)
     return res.status(400).json({ message: "ChatId must be included" });
   // check for message length
-  if (!messageText)
-    return res.status(400).json({ message: "Message must be included" });
+  if (
+    !messageText &&
+    !transferForm &&
+    !giftForm &&
+    !requestPaymentForm &&
+    !claimGiftForm &&
+    !fulfillRequestForm &&
+    !reportForm
+  )
+    return res
+      .status(400)
+      .json({ message: "Message or form details must be included" });
   // valid chatid
 
   if (!session[chatId]) {
@@ -1045,6 +1413,450 @@ export default async function handler(
 
   if (!userAcctDetail[chatId]) {
     userAcctDetail[chatId] = {};
+  }
+
+  if (giftForm) {
+    try {
+      const cryptoFields = normalizeCryptoFields(giftForm as GiftFormPayload);
+      const phoneFields = normalizePhoneFields(giftForm as GiftFormPayload);
+      const estimation = String(giftForm.estimation ?? "").toLowerCase();
+      const amount = String(giftForm.amount ?? "").replace(/[^\d.]/g, "");
+
+      if (!SUPPORTED_ESTIMATIONS.has(estimation)) {
+        throw new Error("Select a valid estimation type.");
+      }
+      if (!isValidAmount(amount)) throw new Error("Enter a valid amount.");
+
+      const updatedSession: Sess = {
+        type: "gift",
+        claimGiftMode: false,
+        ...cryptoFields,
+        estimation,
+        Amount: amount,
+        receiver_phoneCountry: phoneFields.phoneCountry,
+        receiver_phoneNumber: phoneFields.phoneNumber,
+        isReadyForPayment: true,
+      };
+      session[chatId] = updatedSession;
+
+      let fiatAmountInNgn = Number(amount);
+      if (estimation === "dollar") fiatAmountInNgn *= await fetchRate();
+      const payment = await createEnginePayment({
+        type: "gift",
+        ...(estimation === "crypto"
+          ? { cryptoAmount: Number(amount) }
+          : { fiatAmount: fiatAmountInNgn }),
+        fiatCurrency: "NGN",
+        crypto: updatedSession.crypto,
+        network: updatedSession.network,
+        chargeFrom: "crypto",
+        payer: { chatId, phone: updatedSession.receiver_phoneNumber },
+      });
+
+      updatedSession.totalcrypto = payment.cryptoAmount;
+      updatedSession.wallet_address = payment.depositAddress;
+      updatedSession.amountString = payment.fiatAmount;
+      updatedSession.id = payment.reference;
+      updatedSession.verifier = true;
+
+      const reply = `You are sending ${updatedSession.totalcrypto} ${updatedSession.crypto} and the recipient will receive ₦${updatedSession.amountString}.`;
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+      return res.status(200).json({
+        reply,
+        copyableItems: paymentCopyableItems(payment, "gift", "Gift ID"),
+      });
+    } catch (error) {
+      console.error("Create gift from form error:", error);
+      const { status, body } = getFormErrorResponse(error);
+      return res.status(status).json(body);
+    }
+  }
+
+  if (requestPaymentForm) {
+    try {
+      const bank = await verifyBankForm(
+        requestPaymentForm as RequestPaymentFormPayload,
+      );
+      const phone = normalizePhoneFields(
+        requestPaymentForm as RequestPaymentFormPayload,
+      );
+      const amount = String(requestPaymentForm.amount ?? "").replace(
+        /[^\d.]/g,
+        "",
+      );
+      if (!isValidAmount(amount)) throw new Error("Enter a valid amount.");
+
+      const updatedSession: Sess = {
+        type: "request",
+        requestFulfillment: false,
+        Amount: amount,
+        bank_name: bank.bankName,
+        bankcode: bank.bankCode,
+        acct_number: bank.accountNumber,
+        receiver_name: bank.accountName,
+        accountDetailsConfirmed: true,
+        receiver_phoneCountry: phone.phoneCountry,
+        receiver_phoneNumber: phone.phoneNumber,
+        isReadyForPayment: true,
+      };
+      session[chatId] = updatedSession;
+      userAcctDetail[chatId] = {
+        bank_name: bank.bankName,
+        acct_number: bank.accountNumber,
+        receiver_name: bank.accountName,
+        receiver_phoneCountry: phone.phoneCountry,
+        receiver_phoneNumber: phone.phoneNumber,
+      };
+
+      const payment = await createEnginePayment({
+        type: "request",
+        fiatAmount: Number(amount),
+        fiatCurrency: "NGN",
+        receiver: {
+          bankCode: bank.bankCode,
+          accountNumber: bank.accountNumber,
+          phone: phone.phoneNumber,
+        },
+      });
+      updatedSession.amountString = payment.fiatAmount;
+      updatedSession.id = payment.reference;
+      updatedSession.verifier = true;
+
+      const reply = `You will receive ₦${payment.fiatAmount}. It will be paid to ${bank.accountName}, ${bank.bankName} ${bank.accountNumber}. Share the request ID with the person paying you.`;
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+      return res.status(200).json({
+        reply,
+        copyableItems: paymentCopyableItems(
+          payment,
+          "request",
+          "Request ID",
+        ),
+      });
+    } catch (error) {
+      console.error("Create payment request from form error:", error);
+      const { status, body } = getFormErrorResponse(error);
+      return res.status(status).json(body);
+    }
+  }
+
+  if (claimGiftForm) {
+    try {
+      const giftId = normalizeReference(claimGiftForm.giftId, "gift ID");
+      normalizeBankForm(claimGiftForm as ClaimGiftFormPayload);
+      const result = await engineGet<PaymentResponse>(`/payments/${giftId}`);
+      const status = result.payment.status?.toLowerCase();
+
+      if (result.payment.type !== "gift") {
+        throw new Error(`This gift ID is not available: ${giftId}.`);
+      }
+      if (status === "settled" || status === "settling") {
+        throw new Error("This gift has already been claimed.");
+      }
+      if (status !== "confirmed" && status !== "pending_claim") {
+        throw new Error(`This gift is still ${result.payment.status}. Try again later.`);
+      }
+
+      const bank = await verifyBankForm(claimGiftForm as ClaimGiftFormPayload);
+
+      const updatedSession: Sess = {
+        type: "gift",
+        claimGiftMode: true,
+        giftReadyToClaim: true,
+        id: giftId,
+        bank_name: bank.bankName,
+        bankcode: bank.bankCode,
+        acct_number: bank.accountNumber,
+        receiver_name: bank.accountName,
+        accountDetailsConfirmed: true,
+        isReadyForPayment: true,
+      };
+      session[chatId] = updatedSession;
+      await claimGift(giftId, {
+        bankCode: bank.bankCode,
+        accountNumber: bank.accountNumber,
+      });
+      updatedSession.verifier = true;
+
+      const reply = `Your gift claim is successful. The payout will be sent to ${bank.accountName}, ${bank.bankName} ${bank.accountNumber}.`;
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+      return res.status(200).json({ reply, claimGiftMode: true });
+    } catch (error) {
+      console.error("Claim gift from form error:", error);
+      const { status, body } = getFormErrorResponse(error);
+      return res.status(status).json(body);
+    }
+  }
+
+  if (fulfillRequestForm) {
+    try {
+      const requestId = normalizeReference(
+        fulfillRequestForm.requestId,
+        "request ID",
+      );
+      const cryptoFields = normalizeCryptoFields(
+        fulfillRequestForm as FulfillRequestFormPayload,
+      );
+      const phone = normalizePhoneFields(
+        fulfillRequestForm as FulfillRequestFormPayload,
+      );
+      const result = await engineGet<PaymentResponse>(`/payments/${requestId}`);
+
+      if (result.payment.type !== "request") {
+        throw new Error(`This request ID is not available: ${requestId}.`);
+      }
+      if (result.payment.status !== "created") {
+        throw new Error(
+          `This request is ${result.payment.status}. It cannot be paid right now.`,
+        );
+      }
+
+      const updatedSession: Sess = {
+        type: "request",
+        requestFulfillment: true,
+        id: requestId,
+        Amount: String(result.payment.fiatAmount),
+        ...cryptoFields,
+        receiver_phoneCountry: phone.phoneCountry,
+        receiver_phoneNumber: phone.phoneNumber,
+        isReadyForPayment: true,
+      };
+      session[chatId] = updatedSession;
+      const payment = await fulfillRequest(requestId, {
+        crypto: cryptoFields.crypto,
+        network: cryptoFields.network,
+        payer: { chatId, phone: phone.phoneNumber },
+      });
+      updatedSession.totalcrypto = payment.cryptoAmount;
+      updatedSession.wallet_address = payment.depositAddress;
+      updatedSession.amountString = payment.fiatAmount;
+      updatedSession.id = payment.reference;
+      updatedSession.verifier = true;
+
+      const reply = `You are sending ${payment.cryptoAmount} ${cryptoFields.crypto} to pay request ${payment.reference}.`;
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+      return res.status(200).json({
+        reply,
+        copyableItems: paymentCopyableItems(
+          payment,
+          "request",
+          "Request ID",
+        ),
+      });
+    } catch (error) {
+      console.error("Fulfill request from form error:", error);
+      const { status, body } = getFormErrorResponse(error);
+      return res.status(status).json(body);
+    }
+  }
+
+  if (reportForm) {
+    try {
+      const complaintType = normalizeComplaintType(reportForm.complaintType);
+      const name = String(reportForm.name ?? "").trim();
+      const phone = normalizePhoneFields(reportForm as ReportFormPayload);
+      const walletAddress = String(reportForm.walletAddress ?? "").trim();
+      const fraudsterWalletAddress = String(
+        reportForm.fraudsterWalletAddress ?? "",
+      ).trim();
+      const description = String(reportForm.description ?? "").trim();
+
+      if (!complaintType) throw new Error("Select a valid report type.");
+      if (!name) throw new Error("Enter your full name.");
+      if (!walletAddress) throw new Error("Enter your wallet address.");
+      if (!description) throw new Error("Briefly describe what happened.");
+
+      const updatedSession: Sess = {
+        type: "report",
+        complaintType,
+        reportName: name,
+        reportPhoneCountry: phone.phoneCountry,
+        reportPhoneNumber: phone.phoneNumber,
+        reportWalletAddress: walletAddress,
+        fraudsterWalletAddress,
+        reportDescription: description,
+        isReadyForPayment: true,
+      };
+      session[chatId] = updatedSession;
+      const report = await enginePost<ReportResponse>("/reports", {
+        complaintType,
+        name,
+        phoneNumber: phone.phoneNumber,
+        walletAddress,
+        fraudsterWalletAddress: fraudsterWalletAddress || undefined,
+        description,
+      });
+      updatedSession.reportId = report.data.report.reportId;
+      updatedSession.reportStatus = report.data.report.status;
+      updatedSession.verifier = true;
+
+      const reply = `Report submitted successfully. Your report ID is ${updatedSession.reportId}. Status: ${updatedSession.reportStatus}.`;
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+      return res.status(200).json({
+        reply,
+        copyableItems: [
+          { label: "Report ID", text: updatedSession.reportId },
+        ],
+      });
+    } catch (error) {
+      console.error("Submit report from form error:", error);
+      const { status, body } = getFormErrorResponse(error);
+      return res.status(status).json(body);
+    }
+  }
+
+  if (transferForm) {
+    let normalizedForm: TransferFormPayload;
+
+    try {
+      normalizedForm = normalizeTransferForm(transferForm);
+    } catch (error) {
+      return res.status(400).json({
+        error:
+          error instanceof Error
+            ? error.message
+            : "The transfer details are invalid.",
+      });
+    }
+
+    try {
+      const bankDetails = await enginePost<ResolveBankResponse>(
+        "/banks/resolve",
+        {
+          bank_code: normalizedForm.bankCode,
+          account_number: normalizedForm.accountNumber,
+        },
+      );
+      const resolvedAccountName =
+        bankDetails.data?.account_name ?? bankDetails.data?.accountName;
+      const resolvedBankCode =
+        bankDetails.data?.bank_code ?? bankDetails.data?.bankCode;
+
+      if (!resolvedAccountName) {
+        return res.status(400).json({
+          error: "The account name could not be verified. Check the details.",
+        });
+      }
+
+      const submittedAccountName = normalizedForm.accountName
+        ?.replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+      const verifiedAccountName = resolvedAccountName
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+
+      if (submittedAccountName !== verifiedAccountName) {
+        return res.status(400).json({
+          error:
+            "The resolved account details changed. Please verify and confirm them again.",
+        });
+      }
+
+      let updatedSession: Sess = {
+        type: "transfer",
+        crypto: normalizedForm.crypto,
+        network: normalizedForm.network,
+        estimation: normalizedForm.estimation,
+        Amount: normalizedForm.amount,
+        bank_name: normalizedForm.bankName,
+        bankcode: resolvedBankCode || normalizedForm.bankCode,
+        acct_number: normalizedForm.accountNumber,
+        receiver_name: resolvedAccountName,
+        accountDetailsConfirmed: normalizedForm.accountDetailsConfirmed,
+        receiver_phoneCountry: normalizedForm.phoneCountry,
+        receiver_phoneNumber: normalizedForm.phoneNumber,
+      };
+
+      userAcctDetail[chatId] = {
+        bank_name: updatedSession.bank_name,
+        acct_number: updatedSession.acct_number,
+        receiver_name: updatedSession.receiver_name,
+        receiver_phoneCountry: updatedSession.receiver_phoneCountry,
+        receiver_phoneNumber: updatedSession.receiver_phoneNumber,
+      };
+
+      updatedSession = applyConversationState(updatedSession);
+      session[chatId] = updatedSession;
+
+      if (!updatedSession.isReadyForPayment) {
+        return res.status(400).json({
+          error: "Please complete every transfer field with valid details.",
+        });
+      }
+
+      const amount = Number(updatedSession.Amount);
+      let fiatAmountInNgn = amount;
+      if (updatedSession.estimation === "dollar") {
+        fiatAmountInNgn *= await fetchRate();
+      }
+
+      const paymentInput: CreatePaymentInput = {
+        type: "transfer",
+        ...(updatedSession.estimation === "crypto"
+          ? { cryptoAmount: amount }
+          : { fiatAmount: fiatAmountInNgn }),
+        fiatCurrency: "NGN",
+        crypto: updatedSession.crypto,
+        network: updatedSession.network,
+        chargeFrom: "crypto",
+        payer: {
+          chatId,
+        },
+        receiver: {
+          bankCode: updatedSession.bankcode,
+          accountNumber: updatedSession.acct_number,
+        },
+      };
+
+      const payment = await createEnginePayment(paymentInput);
+      updatedSession.totalcrypto = payment.cryptoAmount;
+      updatedSession.wallet_address = payment.depositAddress;
+      updatedSession.amountString = payment.fiatAmount;
+      updatedSession.id = payment.reference;
+      updatedSession.transferSummary = `You are sending ${updatedSession.totalcrypto} ${updatedSession.crypto} and you will be receiving ₦${updatedSession.amountString}.`;
+      updatedSession.verifier = true;
+      session[chatId] = updatedSession;
+
+      const reply = updatedSession.transferSummary;
+      const copyableItems = [
+        ...(payment.depositAddress
+          ? [
+              {
+                label: "Wallet Address",
+                text: payment.depositAddress,
+                isWallet: true,
+                reference: payment.reference,
+                paymentType: "transfer",
+                expiresAt: payment.expiresAt,
+              },
+            ]
+          : []),
+        {
+          label: "Transaction ID",
+          text: payment.reference,
+          reference: payment.reference,
+          paymentType: "transfer",
+        },
+      ];
+
+      session[chatId] = {};
+      userHistories.set(chatId, []);
+
+      return res.status(200).json({
+        reply,
+        copyableItems,
+      });
+    } catch (error) {
+      console.error("Create transfer from form error:", error);
+      const { status, body } = getApiErrorResponse(error);
+      return res.status(status).json(body);
+    }
   }
 
   let shouldClearSessionAfterEngineCall = false;
@@ -1119,9 +1931,40 @@ export default async function handler(
     if (wantsToCreateGift) {
       filtered.type = "gift";
       filtered.claimGiftMode = false;
+      filtered.giftFormMode = true;
     } else if (wantsToClaimGift) {
       filtered.type = "gift";
       filtered.claimGiftMode = true;
+      filtered.claimGiftFormMode = true;
+    } else if (filtered.type === "gift") {
+      filtered.claimGiftMode = false;
+      filtered.giftFormMode = true;
+    }
+
+    if (looksLikeFulfillRequestRequest(messageText)) {
+      filtered.type = "request";
+      filtered.requestFulfillment = true;
+      filtered.fulfillRequestFormMode = true;
+    } else if (
+      looksLikeCreatePaymentRequest(messageText) ||
+      (filtered.type === "request" && !session[chatId]?.requestFulfillment)
+    ) {
+      filtered.type = "request";
+      filtered.requestFulfillment = false;
+      filtered.requestPaymentFormMode = true;
+    }
+
+    if (filtered.type === "report" || looksLikeReportRequest(messageText)) {
+      filtered.type = "report";
+      filtered.reportFormMode = true;
+    }
+
+    if (
+      filtered.type === "transfer" ||
+      looksLikeTransferRequest(messageText)
+    ) {
+      filtered.type = "transfer";
+      filtered.transferFormMode = true;
     }
 
     const baseSession = resetSessionForFlowChange(session[chatId], filtered);
@@ -1150,6 +1993,111 @@ export default async function handler(
     }
     if (!updatedSession.type) {
       updatedSession.type = "transfer";
+    }
+
+    if (updatedSession.giftFormMode === true) {
+      const reply = "Enter your gift details below.";
+      updatedSession.giftFormId ??= crypto.randomUUID();
+      session[chatId] = updatedSession;
+      history.push(new AIMessage(reply));
+      return res.status(200).json({
+        reply,
+        showGiftForm: true,
+        giftFormId: updatedSession.giftFormId,
+        giftFormDefaults: {
+          crypto: updatedSession.crypto || "BTC",
+          network:
+            updatedSession.network ?? (updatedSession.crypto ? "" : "BTC"),
+          estimation: updatedSession.estimation ?? "naira",
+          amount: updatedSession.Amount ?? "",
+          phoneCountry: updatedSession.receiver_phoneCountry ?? "NG",
+          phoneNumber: updatedSession.receiver_phoneNumber ?? "",
+        },
+      });
+    }
+
+    if (updatedSession.requestPaymentFormMode === true) {
+      const reply = "Enter your payment request details below.";
+      updatedSession.requestPaymentFormId ??= crypto.randomUUID();
+      session[chatId] = updatedSession;
+      history.push(new AIMessage(reply));
+      return res.status(200).json({
+        reply,
+        showRequestPaymentForm: true,
+        requestPaymentFormId: updatedSession.requestPaymentFormId,
+        requestPaymentFormDefaults: {
+          amount: updatedSession.Amount ?? "",
+          bankName: updatedSession.bank_name ?? "",
+          bankCode: updatedSession.bankcode ?? "",
+          accountNumber: updatedSession.acct_number ?? "",
+          accountName: updatedSession.receiver_name ?? "",
+          accountDetailsConfirmed: false,
+          phoneCountry: updatedSession.receiver_phoneCountry ?? "NG",
+          phoneNumber: updatedSession.receiver_phoneNumber ?? "",
+        },
+      });
+    }
+
+    if (updatedSession.claimGiftFormMode === true) {
+      const reply = "Enter the gift ID and payout account below.";
+      updatedSession.claimGiftFormId ??= crypto.randomUUID();
+      session[chatId] = updatedSession;
+      history.push(new AIMessage(reply));
+      return res.status(200).json({
+        reply,
+        showClaimGiftForm: true,
+        claimGiftFormId: updatedSession.claimGiftFormId,
+        claimGiftFormDefaults: {
+          giftId: updatedSession.id ?? "",
+          bankName: updatedSession.bank_name ?? "",
+          bankCode: updatedSession.bankcode ?? "",
+          accountNumber: updatedSession.acct_number ?? "",
+          accountName: updatedSession.receiver_name ?? "",
+          accountDetailsConfirmed: false,
+        },
+      });
+    }
+
+    if (updatedSession.fulfillRequestFormMode === true) {
+      const reply = "Enter the request payment details below.";
+      updatedSession.fulfillRequestFormId ??= crypto.randomUUID();
+      session[chatId] = updatedSession;
+      history.push(new AIMessage(reply));
+      return res.status(200).json({
+        reply,
+        showFulfillRequestForm: true,
+        fulfillRequestFormId: updatedSession.fulfillRequestFormId,
+        fulfillRequestFormDefaults: {
+          requestId: updatedSession.id ?? "",
+          crypto: updatedSession.crypto || "BTC",
+          network:
+            updatedSession.network ?? (updatedSession.crypto ? "" : "BTC"),
+          phoneCountry: updatedSession.receiver_phoneCountry ?? "NG",
+          phoneNumber: updatedSession.receiver_phoneNumber ?? "",
+        },
+      });
+    }
+
+    if (updatedSession.reportFormMode === true) {
+      const reply = "Enter your report details below.";
+      updatedSession.reportFormId ??= crypto.randomUUID();
+      session[chatId] = updatedSession;
+      history.push(new AIMessage(reply));
+      return res.status(200).json({
+        reply,
+        showReportForm: true,
+        reportFormId: updatedSession.reportFormId,
+        reportFormDefaults: {
+          complaintType: updatedSession.complaintType ?? "",
+          name: updatedSession.reportName ?? "",
+          phoneCountry: updatedSession.reportPhoneCountry ?? "NG",
+          phoneNumber: updatedSession.reportPhoneNumber ?? "",
+          walletAddress: updatedSession.reportWalletAddress ?? "",
+          fraudsterWalletAddress:
+            updatedSession.fraudsterWalletAddress ?? "",
+          description: updatedSession.reportDescription ?? "",
+        },
+      });
     }
     // 4. Auto-fetch info if ready
     // if (updatedSession.crypto  && !updatedSession.assetPrice) {
@@ -1275,6 +2223,38 @@ export default async function handler(
     updatedSession = applyConversationState(updatedSession);
 
     if (
+      updatedSession.type === "transfer" &&
+      updatedSession.transferFormMode === true &&
+      !updatedSession.isReadyForPayment &&
+      !updatedSession.verifier
+    ) {
+      const reply = "Enter your transfer details below.";
+      updatedSession.transferFormId ??= crypto.randomUUID();
+      session[chatId] = updatedSession;
+      history.push(new AIMessage(reply));
+
+      return res.status(200).json({
+        reply,
+        showTransferForm: true,
+        transferFormId: updatedSession.transferFormId,
+        transferFormDefaults: {
+          crypto: updatedSession.crypto || "BTC",
+          network:
+            updatedSession.network ?? (updatedSession.crypto ? "" : "BTC"),
+          estimation: updatedSession.estimation ?? "naira",
+          amount: updatedSession.Amount ?? "",
+          bankName: updatedSession.bank_name ?? "",
+          bankCode: updatedSession.bankcode ?? "",
+          accountNumber: updatedSession.acct_number ?? "",
+          accountName: updatedSession.receiver_name ?? "",
+          accountDetailsConfirmed: false,
+          phoneCountry: updatedSession.receiver_phoneCountry ?? "NG",
+          phoneNumber: updatedSession.receiver_phoneNumber ?? "",
+        },
+      });
+    }
+
+    if (
       updatedSession.type === "report" &&
       updatedSession.isReadyForPayment &&
       !updatedSession.verifier
@@ -1372,7 +2352,9 @@ export default async function handler(
       if (updatedSession.type === "transfer") {
         const user: CreatePaymentInput = {
           type: "transfer",
-          fiatAmount: fiatAmountInNgn,
+          ...(String(updatedSession.estimation).toLowerCase() === "crypto"
+            ? { cryptoAmount: Number(updatedSession.Amount) }
+            : { fiatAmount: fiatAmountInNgn }),
           fiatCurrency: "NGN",
           crypto: updatedSession.crypto,
           network: updatedSession.network,

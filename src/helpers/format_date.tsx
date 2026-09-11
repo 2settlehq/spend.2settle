@@ -172,13 +172,12 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
+  const formattedTime = `${minutes}:${seconds < 10 ? `0${seconds}` : seconds}`;
 
   const getDisplayText = () => {
     switch (currentStatus) {
       case "pending":
-        return `This wallet address expires in ${minutes}:${
-          seconds < 10 ? `0${seconds}` : seconds
-        }`;
+        return "countdown";
       case "confirming":
         return "Payment status: Confirming";
       case "confirmed":
@@ -194,22 +193,34 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
       case "settlement_reversed":
         return "Payment status: Reversed";
       default:
-        return `This wallet address expires in ${minutes}:${
-          seconds < 10 ? `0${seconds}` : seconds
-        }`;
+        return "countdown";
     }
   };
 
+  if (getDisplayText() === "countdown") {
+    return (
+      <span className="text-xs font-normal text-gray-900">
+        You have{" "}
+        <strong
+          className={`text-sm ${
+            timeLeft > 2 * 60
+              ? "text-green-600"
+              : "animate-pulse text-red-600"
+          }`}
+        >
+          {formattedTime}
+        </strong>{" "}
+        to complete this payment
+      </span>
+    );
+  }
+
   const className =
-    currentStatus === "pending"
-      ? `font-bold text-xl ${
-          timeLeft > 2 * 60 ? "text-green-600" : "text-red-600 animate-pulse"
-        }`
-      : currentStatus === "settled"
-        ? "font-bold text-xl text-green-600"
+    currentStatus === "settled"
+        ? "font-bold text-sm text-green-600"
         : ["expired", "failed", "settlement_reversed"].includes(currentStatus)
-          ? "font-bold text-xl text-red-600"
-          : "font-bold text-xl text-blue-600";
+          ? "font-bold text-sm text-red-600"
+          : "font-bold text-sm text-blue-600";
 
   return (
     <span className={className}>{getDisplayText()}</span>

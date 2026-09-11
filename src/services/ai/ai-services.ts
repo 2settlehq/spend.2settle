@@ -6,7 +6,6 @@ interface StreamAxiosLikeError {
   response: { status: number; data: any };
 }
 
-
 export interface GemCopyableItem {
   label: string;
   text: string;
@@ -16,18 +15,99 @@ export interface GemCopyableItem {
   expiresAt?: string | null;
 }
 
+export interface TransferFormData {
+  crypto: string;
+  network: string;
+  estimation: string;
+  amount: string;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  accountDetailsConfirmed: boolean;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+export interface GiftFormData {
+  crypto: string;
+  network: string;
+  estimation: string;
+  amount: string;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+export interface RequestPaymentFormData {
+  amount: string;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  accountDetailsConfirmed: boolean;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+export interface ClaimGiftFormData {
+  giftId: string;
+  bankName: string;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  accountDetailsConfirmed: boolean;
+}
+
+export interface FulfillRequestFormData {
+  requestId: string;
+  crypto: string;
+  network: string;
+  phoneCountry: string;
+  phoneNumber: string;
+}
+
+export interface ReportFormData {
+  complaintType: string;
+  name: string;
+  phoneCountry: string;
+  phoneNumber: string;
+  walletAddress: string;
+  fraudsterWalletAddress: string;
+  description: string;
+}
+
 export interface GemResponseType {
   reply: string;
   copyableItems?: GemCopyableItem[];
   claimGiftMode?: boolean;
+  showTransferForm?: boolean;
+  transferFormId?: string;
+  transferFormDefaults?: Partial<TransferFormData>;
+  showGiftForm?: boolean;
+  giftFormId?: string;
+  giftFormDefaults?: Partial<GiftFormData>;
+  showRequestPaymentForm?: boolean;
+  requestPaymentFormId?: string;
+  requestPaymentFormDefaults?: Partial<RequestPaymentFormData>;
+  showClaimGiftForm?: boolean;
+  claimGiftFormId?: string;
+  claimGiftFormDefaults?: Partial<ClaimGiftFormData>;
+  showFulfillRequestForm?: boolean;
+  fulfillRequestFormId?: string;
+  fulfillRequestFormDefaults?: Partial<FulfillRequestFormData>;
+  showReportForm?: boolean;
+  reportFormId?: string;
+  reportFormDefaults?: Partial<ReportFormData>;
 }
 
-
-export const OpenAI = async (updatedMessages: any, sessionId: String): Promise<any> => {
+export const OpenAI = async (
+  updatedMessages: any,
+  sessionId: String,
+): Promise<any> => {
   try {
     const response = await axios.post<any>(
       `${apiURL}/api/openai`,
-      { messages: updatedMessages, sessionId: sessionId }
+      { messages: updatedMessages, sessionId: sessionId },
     );
     console.log("Use transaction created successfully");
     return response.data;
@@ -42,7 +122,7 @@ export const geminiAi = async (
   sessionId: String,
   onChunk?: (accumulatedText: string) => void,
 ): Promise<GemResponseType> => {
-  console.log('working',updatedMessages);
+  console.log("working", updatedMessages);
   try {
     const response = await fetch(`${apiURL}/api/ai/geminiApi`, {
       method: "POST",
@@ -63,6 +143,11 @@ export const geminiAi = async (
         response: { status: response.status, data },
       };
       throw error;
+    }
+
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      return (await response.json()) as GemResponseType;
     }
 
     if (!response.body) {
@@ -90,3 +175,85 @@ export const geminiAi = async (
     throw error;
   }
 };
+
+export const submitTransferForm = async (
+  transferForm: TransferFormData,
+  sessionId: string,
+): Promise<GemResponseType> => {
+  const response = await fetch(`${apiURL}/api/ai/geminiApi`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transferForm, chatId: sessionId }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error: StreamAxiosLikeError = {
+      message: data?.error ?? data?.message ?? "Transfer could not be created",
+      response: { status: response.status, data },
+    };
+    throw error;
+  }
+
+  return data as GemResponseType;
+};
+
+const submitWorkflowForm = async <T>(
+  key: string,
+  form: T,
+  sessionId: string,
+  fallbackMessage: string,
+): Promise<GemResponseType> => {
+  const response = await fetch(`${apiURL}/api/ai/geminiApi`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ [key]: form, chatId: sessionId }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error: StreamAxiosLikeError = {
+      message: data?.error ?? data?.message ?? fallbackMessage,
+      response: { status: response.status, data },
+    };
+    throw error;
+  }
+
+  return data as GemResponseType;
+};
+
+export const submitGiftForm = (form: GiftFormData, sessionId: string) =>
+  submitWorkflowForm("giftForm", form, sessionId, "Gift could not be created");
+
+export const submitRequestPaymentForm = (
+  form: RequestPaymentFormData,
+  sessionId: string,
+) =>
+  submitWorkflowForm(
+    "requestPaymentForm",
+    form,
+    sessionId,
+    "Payment request could not be created",
+  );
+
+export const submitClaimGiftForm = (
+  form: ClaimGiftFormData,
+  sessionId: string,
+) =>
+  submitWorkflowForm("claimGiftForm", form, sessionId, "Gift could not be claimed");
+
+export const submitFulfillRequestForm = (
+  form: FulfillRequestFormData,
+  sessionId: string,
+) =>
+  submitWorkflowForm(
+    "fulfillRequestForm",
+    form,
+    sessionId,
+    "Payment request could not be fulfilled",
+  );
+
+export const submitReportForm = (form: ReportFormData, sessionId: string) =>
+  submitWorkflowForm("reportForm", form, sessionId, "Report could not be submitted");

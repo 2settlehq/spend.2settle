@@ -21,28 +21,29 @@ const ChatInput = ({ textareaRef, chatInput, onChange, onSubmit }: Props) => {
   };
 
   return (
-    <div className="p-3 border-t border-gray-200 bg-white">
-      <div className="flex items-center">
+    <footer className="flex-shrink-0 border-t border-gray-200 bg-white px-4 py-3 sm:px-5">
+      <div className="flex min-h-12 items-center gap-3">
         <textarea
           ref={textareaRef}
           value={chatInput}
           onChange={onChange}
           onKeyDown={handleKeyPress}
-          className="flex-grow pl-2 pr-2 py-2 border-none outline-none resize-none"
+          className="max-h-28 min-h-10 flex-grow resize-none border-none bg-transparent px-0 py-2 text-sm leading-5 outline-none"
           placeholder="Enter a message..."
           rows={1}
           spellCheck={false}
           required
         />
         <button
+          type="button"
           onClick={() => onSubmit(chatInput)}
-          className="ml-2 text-blue-500 cursor-pointer"
+          className="inline-flex h-11 w-11 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-blue-500 transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           aria-label="Send message"
         >
           <SendIcon />
         </button>
       </div>
-    </div>
+    </footer>
   );
 };
 export default ChatInput;

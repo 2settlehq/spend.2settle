@@ -6,7 +6,6 @@ import useChatStore, { MessageType } from "stores/chatStore";
 
 interface Props {
   groupedMessages: Record<string, MessageType[]>;
-  chatMessages: MessageType[];
   loading: boolean;
   dateSeperatorBadge: (dateString: string) => ReactNode;
   messagesEndRef: React.RefObject<HTMLDivElement>;
@@ -15,7 +14,6 @@ interface Props {
 
 const ChatMessages = ({
   groupedMessages,
-  chatMessages,
   loading,
   dateSeperatorBadge,
   messagesEndRef,
@@ -24,17 +22,18 @@ const ChatMessages = ({
   const streamingMessage = useChatStore((s) => s.streamingMessage);
 
   return (
-    <div className="flex-grow overflow-y-auto" ref={chatboxRef}>
-      <ul className="p-4 space-y-4">
+    <main
+      className="min-h-0 flex-1 overflow-y-auto bg-white overscroll-contain"
+      ref={chatboxRef}
+    >
+      <ul className="space-y-3 px-4 py-4 sm:px-5 sm:py-5">
         {Object.entries(groupedMessages).map(([dateString, messages]) => (
           <React.Fragment key={dateString}>
             {dateSeperatorBadge(dateString)}
-            {/* ${visibleDateSeparators.has(dateString) ? "" : "hidden"} */}
-            {chatMessages.map((msg, index) => (
+            {messages.map((msg, index) => (
               <ChatMessageItem
+                key={`${dateString}-${index}`}
                 msg={msg}
-                dateString={dateString}
-                index={index}
               />
             ))}
           </React.Fragment>
@@ -46,22 +45,20 @@ const ChatMessages = ({
               content: <span>{streamingMessage}</span>,
               timestamp: new Date(),
             }}
-            dateString="streaming"
-            index={-1}
           />
         ) : (
           loading && (
             <div className="flex items-center">
-              <span className="flex-shrink-0 w-6 h-6 md:w-8 md:h-8 mr-2 md:mr-4 mt-2 bg-white rounded">
+              <span className="mr-3 mt-2 h-9 w-9 flex-shrink-0 self-end rounded bg-white">
                 <Image
-                  src="/wale/waaa.png"
+                  src="/wale/wale-chat-icon.png"
                   alt="Avatar"
-                  width={32}
-                  height={32}
-                  className="rounded"
+                  width={36}
+                  height={36}
+                  className="h-full w-full rounded object-cover"
                 />
               </span>
-              <div className="bg-gray-200 relative left-1 top-1 rounded-bl-none pr-2 pt-2 pl-2 pb-1 md:pr-4 md:pt-4 md:pl-3 md:pb-2 rounded-lg mr-12 md:mr-48">
+              <div className="relative left-1 top-1 mr-12 rounded-2xl rounded-bl-none bg-gray-200 px-4 py-3">
                 <div className="flex justify-start">
                   <Loader />
                 </div>
@@ -71,7 +68,7 @@ const ChatMessages = ({
         )}
       </ul>
       <div ref={messagesEndRef} />
-    </div>
+    </main>
   );
 };
 
