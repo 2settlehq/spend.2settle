@@ -142,8 +142,8 @@ export function BankDetailsInputs({
     ? "absolute left-2 top-0 z-10 bg-white px-1 text-[11px] font-medium leading-4 text-gray-700"
     : FLOATING_LABEL_CLASS;
   const inputClassName = compact
-    ? "h-9 px-2.5 !text-xs"
-    : "h-11 !text-xs";
+    ? "h-9 px-2.5 !text-base md:!text-xs"
+    : "h-11 !text-base md:!text-xs";
 
   return (
     <>

@@ -69,7 +69,10 @@ const Home: NextPage = () => {
           content="crypto to fiat Africa, send crypto Nigeria, crypto payments, stablecoin payments, 2Settle, spend crypto, crypto to naira, crypto commerce"
         />
         <meta name="author" content="2Settle Team" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <meta name="theme-color" content="#ffffff" />
 
         {/* Open Graph (for Facebook, LinkedIn) */}

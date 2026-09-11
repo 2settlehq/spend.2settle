@@ -11,8 +11,8 @@ interface Props {
 const ChatHeader = ({ onClose, showDateDropdown, currentDate }: Props) => {
   const isOnline = useOnlineStatus();
   return (
-    <header className="relative z-10 flex-shrink-0 bg-blue-500 text-white shadow">
-      <div className="flex min-h-[52px] items-center gap-3 px-6">
+    <header className="relative z-10 flex-shrink-0 bg-blue-500 pt-[env(safe-area-inset-top)] text-white shadow">
+      <div className="flex min-h-[52px] items-center gap-3 px-4 sm:px-6">
         <button
           type="button"
           onClick={onClose}

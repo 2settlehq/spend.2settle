@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function Layout({ children }: Props) {
-  const isMobile = useMediaQuery("(max-width: 425px)");
+  const isMobile = useMediaQuery("(max-width: 767px)");
   const isTab = useMediaQuery("(max-width: 768px)");
   const isDeskTop = useMediaQuery("(max-width: 1440px)");
 

@@ -22,7 +22,7 @@ const ChatMessageItem = ({ msg }: Props) => {
 
   return (
     <li
-      className={`flex ${
+      className={`flex min-w-0 max-w-full ${
         msg.type === "incoming" ? "items-start" : "justify-end"
       }`}
     >
