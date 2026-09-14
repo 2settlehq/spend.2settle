@@ -49,6 +49,7 @@ const ChatLayout = ({
         chatboxRef={chatboxRef}
       />
       <ChatInput
+        loading={loading}
         chatInput={chatInput}
         onChange={onChange}
         onSubmit={onSubmit}
