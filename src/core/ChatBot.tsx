@@ -43,25 +43,43 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     const root = document.documentElement;
     const previousBodyOverflow = document.body.style.overflow;
     const previousRootOverflow = root.style.overflow;
+    const viewport = window.visualViewport;
+    const initialHeight = window.innerHeight;
     const updateViewportHeight = () => {
-      const height = window.visualViewport?.height ?? window.innerHeight;
+      const height = viewport?.height ?? window.innerHeight;
+      const keyboardOpen = initialHeight - height > 150;
       root.style.setProperty("--chat-viewport-height", `${height}px`);
+      root.style.setProperty("--chat-viewport-top", `${viewport?.offsetTop ?? 0}px`);
+      root.style.setProperty("--chat-bottom-inset", keyboardOpen ? "0px" : "env(safe-area-inset-bottom)");
+      const chatbox = chatboxRef.current;
+      const focusedField = document.activeElement;
+      if (chatbox && focusedField instanceof HTMLElement && chatbox.contains(focusedField)) {
+        requestAnimationFrame(() => focusedField.scrollIntoView({ block: "nearest" }));
+      } else if (chatbox) {
+        chatbox.scrollTop = chatbox.scrollHeight;
+      }
     };
 
     document.body.style.overflow = "hidden";
     root.style.overflow = "hidden";
     updateViewportHeight();
-    window.visualViewport?.addEventListener("resize", updateViewportHeight);
+    viewport?.addEventListener("resize", updateViewportHeight);
+    viewport?.addEventListener("scroll", updateViewportHeight);
+    window.addEventListener("resize", updateViewportHeight);
     window.addEventListener("orientationchange", updateViewportHeight);
 
     return () => {
       document.body.style.overflow = previousBodyOverflow;
       root.style.overflow = previousRootOverflow;
       root.style.removeProperty("--chat-viewport-height");
-      window.visualViewport?.removeEventListener("resize", updateViewportHeight);
+      root.style.removeProperty("--chat-viewport-top");
+      root.style.removeProperty("--chat-bottom-inset");
+      viewport?.removeEventListener("resize", updateViewportHeight);
+      viewport?.removeEventListener("scroll", updateViewportHeight);
+      window.removeEventListener("resize", updateViewportHeight);
       window.removeEventListener("orientationchange", updateViewportHeight);
     };
-  }, [isMobile]);
+  }, [isMobile, chatboxRef]);
 
   const layout = (
     <ChatLayout
@@ -71,8 +89,8 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
       groupedMessages={groupedMessages}
       loading={loading}
       dateSeperatorBadge={(dateString) => (
-        <li className="flex justify-center py-1 text-[10px]">
-          <span className="px-3 py-1">{dateString}</span>
+        <li className="flex justify-center py-3 text-[10px] text-gray-500">
+          <span className="rounded-full bg-gray-100 px-3 py-1">{dateString}</span>
         </li>
       )}
       messagesEndRef={messagesEndRef}
@@ -88,7 +106,7 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     <ErrorBoundary>
       {isMobile ? (
         <div
-          className={`${GeistSans.className} fixed left-0 top-0 flex h-[var(--chat-viewport-height,100dvh)] w-full max-w-full min-h-0 flex-col overflow-hidden bg-white text-sm [&_input]:text-base [&_textarea]:text-base md:[&_input]:text-xs md:[&_textarea]:text-sm`}
+          className={`${GeistSans.className} fixed left-0 top-[var(--chat-viewport-top,0px)] flex h-[var(--chat-viewport-height,100dvh)] w-full max-w-full min-h-0 flex-col overflow-hidden bg-white text-sm [&_input]:text-base [&_textarea]:text-base md:[&_input]:text-xs md:[&_textarea]:text-sm`}
         >
           {layout}
         </div>

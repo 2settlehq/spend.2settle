@@ -26,7 +26,7 @@ const ChatMessages = ({
       className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-white overscroll-contain"
       ref={chatboxRef}
     >
-      <ul className="min-w-0 space-y-3 px-3 py-4 sm:px-5 sm:py-5">
+      <ul aria-label="Conversation with 2settle" className="min-w-0 px-2.5 pb-3 pt-1 sm:px-4">
         {Object.entries(groupedMessages).map(([dateString, messages]) => (
           <React.Fragment key={dateString}>
             {dateSeperatorBadge(dateString)}
@@ -34,6 +34,17 @@ const ChatMessages = ({
               <ChatMessageItem
                 key={`${dateString}-${index}`}
                 msg={msg}
+                grouped={
+                  index > 0 &&
+                  messages[index - 1].type === msg.type &&
+                  new Date(msg.timestamp).getTime() -
+                    new Date(messages[index - 1].timestamp).getTime() <
+                    5 * 60 * 1000
+                }
+                showAvatar={
+                  index === messages.length - 1 ||
+                  messages[index + 1].type !== msg.type
+                }
               />
             ))}
           </React.Fragment>
@@ -48,22 +59,22 @@ const ChatMessages = ({
           />
         ) : (
           loading && (
-            <div className="flex items-center">
-              <span className="mr-3 mt-2 h-9 w-9 flex-shrink-0 self-end rounded bg-white">
+            <li aria-label="2settle is typing" className="mt-3 flex items-end">
+              <span className="mr-1.5 h-6 w-6 flex-shrink-0 rounded-full bg-white">
                 <Image
                   src="/wale/wale-chat-icon.png"
                   alt="Avatar"
-                  width={36}
-                  height={36}
-                  className="h-full w-full rounded object-cover"
+                  width={24}
+                  height={24}
+                  className="h-full w-full rounded-full object-cover"
                 />
               </span>
-              <div className="relative left-1 top-1 mr-12 rounded-2xl rounded-bl-none bg-gray-200 px-4 py-3">
+              <div className="rounded-2xl rounded-bl-sm bg-gray-200 px-3 py-2.5">
                 <div className="flex justify-start">
                   <Loader />
                 </div>
               </div>
-            </div>
+            </li>
           )
         )}
       </ul>
