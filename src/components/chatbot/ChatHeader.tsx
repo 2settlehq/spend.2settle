@@ -11,17 +11,17 @@ interface Props {
 const ChatHeader = ({ onClose, showDateDropdown, currentDate }: Props) => {
   const isOnline = useOnlineStatus();
   return (
-    <header className="relative z-10 flex-shrink-0 bg-blue-500 pt-[env(safe-area-inset-top)] text-white shadow">
-      <div className="flex min-h-[52px] items-center gap-3 px-4 sm:px-6">
+    <header className="relative z-10 flex-shrink-0 bg-blue-500 pt-[env(safe-area-inset-top)] text-white shadow-sm">
+      <div className="flex min-h-[56px] items-center gap-2.5 px-3 sm:px-4">
         <button
           type="button"
           onClick={onClose}
-          className="-ml-2 inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-white/70"
+          className="-ml-1 inline-flex h-10 w-9 flex-shrink-0 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-white/70"
           aria-label="Close chat"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            className="h-7 w-7"
+            className="h-6 w-6"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -35,28 +35,25 @@ const ChatHeader = ({ onClose, showDateDropdown, currentDate }: Props) => {
           </svg>
         </button>
 
-        <h2 className="min-w-0 flex-1 truncate text-left text-base font-bold">
-          2SettleHQ
-        </h2>
-
-        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white">
-          {isOnline ? (
-            <Image
-              src="/wale/wale-chat-icon.png"
-              alt="Avatar"
-              width={28}
-              height={28}
-              className="h-7 w-7 rounded-full object-cover"
-            />
-          ) : (
+        <span className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white">
+          <Image
+            src="/wale/wale-chat-icon.png"
+            alt="Wálé, 2settle assistant"
+            width={36}
+            height={36}
+            className="h-9 w-9 rounded-full object-cover"
+          />
+          {!isOnline && (
             <span
-              className="text-md font-semibold text-red-600"
-              title="You are offline"
-            >
-              ⚠️
-            </span>
+              className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-red-500"
+              role="status"
+              aria-label="You are offline"
+            />
           )}
         </span>
+        <h2 className="min-w-0 flex-1 truncate text-left text-base font-semibold">
+          2SettleHQ
+        </h2>
       </div>
       {showDateDropdown && currentDate && (
         <div className="absolute left-1/2 top-full -translate-x-1/2 rounded-b-lg bg-gray-200 px-4 py-2 text-xs text-gray-700 shadow-md transition-all duration-300 ease-in-out">

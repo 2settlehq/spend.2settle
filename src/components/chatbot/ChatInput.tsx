@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useLayoutEffect } from "react";
 import SendIcon from "@mui/icons-material/Send";
 
 interface Props {
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   chatInput: string;
+  loading?: boolean;
   onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
   onSubmit: (
     chatInput: string,
@@ -11,80 +12,64 @@ interface Props {
   ) => void;
 }
 
-const ChatInput = ({ textareaRef, chatInput, onChange, onSubmit }: Props) => {
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+const ChatInput = ({
+  textareaRef,
+  chatInput,
+  onChange,
+  onSubmit,
+  loading = false,
+}: Props) => {
+  const canSend = Boolean(chatInput.trim()) && !loading;
 
-      onSubmit(chatInput);
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 40), 112)}px`;
+    textarea.style.overflowY = textarea.scrollHeight > 112 ? "auto" : "hidden";
+  }, [chatInput, textareaRef]);
+
+  const sendMessage = () => {
+    if (canSend) onSubmit(chatInput);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      sendMessage();
     }
   };
 
   return (
-    <footer className="flex-shrink-0 border-t border-gray-200 bg-white px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-5 sm:pb-3">
-      <div className="flex min-h-12 items-center gap-3">
-        <textarea
-          ref={textareaRef}
-          value={chatInput}
-          onChange={onChange}
-          onKeyDown={handleKeyPress}
-          className="max-h-28 min-h-10 min-w-0 flex-grow resize-none border-none bg-transparent px-0 py-2 text-base leading-5 outline-none md:text-sm"
-          placeholder="Enter a message..."
-          rows={1}
-          spellCheck={false}
-          required
-        />
+    <footer className="chat-composer flex-shrink-0 border-t border-gray-200 bg-white px-3 pb-[calc(0.5rem+var(--chat-bottom-inset,env(safe-area-inset-bottom)))] pt-2">
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1 rounded-[22px] border border-gray-200 bg-gray-50 px-3.5 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-500/10">
+          <textarea
+            ref={textareaRef}
+            value={chatInput}
+            onChange={onChange}
+            onKeyDown={handleKeyPress}
+            className="block max-h-28 min-h-10 w-full min-w-0 resize-none border-none bg-transparent px-0 py-2.5 text-base leading-5 outline-none placeholder:text-gray-400 md:text-sm"
+            placeholder="Enter a message..."
+            aria-label="Message 2settle"
+            enterKeyHint="send"
+            rows={1}
+            spellCheck={false}
+            required
+          />
+        </div>
         <button
           type="button"
-          onClick={() => onSubmit(chatInput)}
-          className="inline-flex h-11 w-11 flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-blue-500 transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          onClick={sendMessage}
+          disabled={!canSend}
+          onMouseDown={(event) => event.preventDefault()}
+          className="inline-flex h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-full bg-blue-500 text-white transition-opacity hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-default disabled:opacity-40"
           aria-label="Send message"
         >
-          <SendIcon />
+          <SendIcon sx={{ fontSize: 20 }} />
         </button>
       </div>
     </footer>
   );
 };
 export default ChatInput;
-
-// interface Props {
-//   textareaRef: React.RefObject<HTMLTextAreaElement>;
-//   onChange?: React.ChangeEventHandler<HTMLTextAreaElement> | undefined;
-//   handleKeyPress: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
-//   handleConversation: (chatInput: string) => Promise<void>;
-//   chatInput: string;
-// }
-
-// const ChatInput = ({
-//   textareaRef,
-//   chatInput,
-//   onChange,
-//   handleKeyPress,
-//   handleConversation,
-// }: Props) => {
-//   return (
-//     <div className="p-3 border-t border-gray-200 bg-white">
-//       <div className="flex items-center">
-//         <textarea
-// ref={textareaRef}
-// className="flex-grow pl-2 pr-2 py-2 border-none outline-none resize-none"
-// placeholder="Enter a message..."
-// rows={1}
-// spellCheck={false}
-// required
-// value={chatInput}
-// onChange={onChange}
-// onKeyDown={handleKeyPress}
-//         />
-// <button
-//   className="ml-2 text-blue-500 cursor-pointer"
-//   onClick={() => handleConversation(chatInput)}
-//   aria-label="Send message"
-// >
-//           <SendIcon />
-//         </button>
-//       </div>
-//     </div>
-//   );
-// };
