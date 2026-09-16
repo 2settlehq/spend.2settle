@@ -18,6 +18,7 @@ const ChatMessageItem = ({ msg, grouped = false, showAvatar = true }: Props) => 
     [
       "TransferForm",
       "PaymentDetails",
+      "GiftCode",
       "GiftForm",
       "RequestPaymentForm",
       "ClaimGiftForm",

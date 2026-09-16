@@ -16,6 +16,7 @@ type PaymentWebhookPayload = {
   payment: {
     id: string;
     reference: string;
+    giftId?: string | null;
     type: string;
     status: string;
     fiatAmount: number;

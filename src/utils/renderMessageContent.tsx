@@ -4,6 +4,7 @@ import { CountdownTimer } from "@/helpers/format_date";
 import ConfirmAndProceedButton from "@/hooks/chatbot/confirmButtonHook";
 import TransferForm from "@/components/chatbot/TransferForm";
 import PaymentDetails from "@/components/chatbot/PaymentDetails";
+import GiftCode from "@/components/chatbot/GiftCode";
 import {
   ClaimGiftForm,
   FulfillRequestForm,
@@ -21,6 +22,7 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   CountdownTimer,
   TransferForm,
   PaymentDetails,
+  GiftCode,
   GiftForm,
   RequestPaymentForm,
   ClaimGiftForm,
@@ -53,6 +55,7 @@ export const renderMessageContent = (msg: MessageType) => {
                 [
                   "TransferForm",
                   "PaymentDetails",
+                  "GiftCode",
                   "GiftForm",
                   "RequestPaymentForm",
                   "ClaimGiftForm",

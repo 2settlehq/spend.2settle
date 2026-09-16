@@ -1,8 +1,10 @@
 "use client";
 
-import { type ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import { CopyableText } from "@/features/transact/CopyableText";
 import { CountdownTimer } from "@/helpers/format_date";
+import GiftCode from "./GiftCode";
+import type { GiftPaymentTracking } from "@/services/gift-flow";
 
 export interface PaymentDetailItem {
   label: string;
@@ -18,6 +20,7 @@ interface PaymentDetailsProps {
   items?: PaymentDetailItem[];
   expiryTime?: Date | string | number;
   walletReference?: string;
+  giftPayment?: GiftPaymentTracking;
 }
 
 const FIELD_LABEL_CLASS =
@@ -45,7 +48,24 @@ export default function PaymentDetails({
   items = [],
   expiryTime,
   walletReference,
+  giftPayment,
 }: PaymentDetailsProps) {
+  const giftWallet = items.find((item) => item.isWallet && item.paymentType === "gift" && item.reference);
+  const trackedGift = giftPayment ?? (giftWallet?.reference ? {
+    reference: giftWallet.reference,
+    status: "pending",
+    giftId: null,
+    expiresAt: giftWallet.expiresAt,
+  } : undefined);
+  // Older persisted gift replies may still have labelled their tracking
+  // reference as a Gift ID. Show that reference as a Transaction ID instead;
+  // only the live confirmation widget may show an actual Gift ID.
+  const visibleItems = trackedGift
+    ? [
+        ...items.filter((item) => !["gift id", "transaction id"].includes(item.label.toLowerCase())),
+        { label: "Transaction ID", text: trackedGift.reference },
+      ]
+    : items;
   return (
     <section
       aria-label="Payment details"
@@ -58,7 +78,7 @@ export default function PaymentDetails({
           </DetailField>
         )}
 
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <DetailField key={`${item.label}:${item.text}`} label={item.label}>
             <CopyableText
               text={item.text}
@@ -77,9 +97,11 @@ export default function PaymentDetails({
             <CountdownTimer
               expiryTime={expiryTime}
               reference={walletReference}
+              pollStatus={!trackedGift}
             />
           </DetailField>
         )}
+        {trackedGift && <GiftCode payment={trackedGift} />}
       </div>
     </section>
   );

@@ -1,11 +1,11 @@
 import Image from "next/image";
 import _ from "lodash";
 
-const Logo = () => {
+const Logo = ({ className = "" }: { className?: string }) => {
   const isDec = isHoliday(new Date());
 
   return (
-    <div className="relative h-8 w-16 text-2xl md:w-24 lg:w-36">
+    <div className={`relative h-8 w-16 text-2xl md:w-24 lg:w-36 ${className}`}>
       <Image
         src={
           isDec
