@@ -13,6 +13,7 @@ export type PaymentLifecycleStatus =
 
 export type StatusRecord = {
   reference: string;
+  giftId?: string | null;
   status: PaymentLifecycleStatus;
   type?: string;
   expiresAt?: string | null;

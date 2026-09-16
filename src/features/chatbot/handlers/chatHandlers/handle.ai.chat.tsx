@@ -159,7 +159,7 @@ const buildAiReplyMessages = (reply: GemResponseType): MessageType[] => {
   );
   const summary = stripTrailingWalletAddressLine(reply.reply);
 
-  if (copyableItems.length > 0) {
+  if (copyableItems.length > 0 || reply.giftPayment) {
     const walletExpiryTime = walletItem?.expiresAt
       ? new Date(walletItem.expiresAt)
       : new Date(Date.now() + 30 * 60 * 1000);
@@ -174,6 +174,7 @@ const buildAiReplyMessages = (reply: GemResponseType): MessageType[] => {
           items: copyableItems,
           expiryTime: walletItem ? walletExpiryTime.toISOString() : undefined,
           walletReference: walletItem?.reference,
+          giftPayment: reply.giftPayment,
         },
         persist: true,
       },

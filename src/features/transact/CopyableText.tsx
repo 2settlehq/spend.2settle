@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Check, Copy } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useChatStore from "stores/chatStore";
 import { useStatusStore } from "stores/statusStore";
 
@@ -330,9 +330,11 @@ export const CopyableText: React.FC<{
 
   const truncateText = useMemo(
     () => (text: string) => {
-      return text.length > 7 ? `${text.slice(0, 6)}...${text.slice(-4)}` : text;
+      return label === "Gift ID" || text.length <= 7
+        ? text
+        : `${text.slice(0, 6)}...${text.slice(-4)}`;
     },
-    [],
+    [label],
   );
 
   const getButtonText = () => {
@@ -379,7 +381,9 @@ export const CopyableText: React.FC<{
         </div>
       ) : (
         <>
-          {isWallet ? <span>{truncateText(text)}</span> : ""}
+          {isWallet || label === "Transaction ID" ? (
+            <span title={text}>{truncateText(text)}</span>
+          ) : null}
           <Button
             ref={buttonRef}
             onClick={handleCopy}

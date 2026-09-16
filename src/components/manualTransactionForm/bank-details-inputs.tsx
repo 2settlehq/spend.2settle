@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { fetchBankNames, fetchBankDetails } from "@/services/bank/bank.service";
 
 const FLOATING_LABEL_CLASS =
   "absolute left-3 top-0 z-10 bg-white px-1 text-xs font-medium leading-4 text-gray-700";
+const BANK_SELECTION_ERROR = "Please select your bank from the dropdown list.";
 
 interface BankDetailsInputsProps {
   compact?: boolean;
@@ -51,8 +52,17 @@ export function BankDetailsInputs({
   const [isSearching, setIsSearching] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [resolveError, setResolveError] = useState("");
+  const [showBankError, setShowBankError] = useState(false);
+  const bankInputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // A typed bank name is not a selection. Native form validation blocks
+  // submission in every form using this field until a bank code is selected.
+  useEffect(() => {
+    bankInputRef.current?.setCustomValidity(bankCode ? "" : BANK_SELECTION_ERROR);
+    if (bankCode) setShowBankError(false);
+  }, [bankCode, searchTerm]);
 
   // Debounced bank search
   useEffect(() => {
@@ -93,6 +103,8 @@ export function BankDetailsInputs({
   }, []);
 
   const handleBankSelect = (bank: BankSuggestion) => {
+    setShowBankError(false);
+    bankInputRef.current?.setCustomValidity("");
     setSearchTerm(bank.name);
     setSuggestions([]);
     onBankSelect(bank.name, bank.code);
@@ -100,6 +112,8 @@ export function BankDetailsInputs({
 
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
+    setShowBankError(false);
+    bankInputRef.current?.setCustomValidity(BANK_SELECTION_ERROR);
     // Clear previously selected bank if user edits the name
     if (bankCode) {
       onBankSelect("", "");
@@ -156,13 +170,28 @@ export function BankDetailsInputs({
           Bank Name
         </Label>
         <Input
+          ref={bankInputRef}
           id={`${idPrefix}-bank-name`}
           placeholder="Search bank name..."
           value={searchTerm}
           onChange={(e) => handleSearchChange(e.target.value)}
+          onBlur={(event) => {
+            // Moving focus to a suggestion must still allow selecting it.
+            if (suggestionsRef.current?.contains(event.relatedTarget as Node)) return;
+            if (searchTerm.trim() && !bankCode) setShowBankError(true);
+          }}
+          onInvalid={() => setShowBankError(true)}
+          aria-invalid={showBankError}
+          aria-describedby={showBankError ? `${idPrefix}-bank-error` : undefined}
           autoComplete="off"
-          className={inputClassName}
+          required
+          className={`${inputClassName} ${showBankError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
         />
+        {showBankError && (
+          <p id={`${idPrefix}-bank-error`} role="alert" className="mt-1 text-[11px] leading-4 text-red-500">
+            {BANK_SELECTION_ERROR}
+          </p>
+        )}
         {isSearching && (
           <p className={compact ? "text-[11px] text-muted-foreground" : "text-xs text-muted-foreground"}>Searching...</p>
         )}

@@ -29,6 +29,7 @@ import { useStatusStore } from "stores/statusStore";
 interface CountdownTimerProps {
   expiryTime: Date | string | number;
   reference?: string;
+  pollStatus?: boolean;
 }
 
 function toTimeMs(value?: Date | string | number | null): number | undefined {
@@ -42,6 +43,7 @@ function toTimeMs(value?: Date | string | number | null): number | undefined {
 export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   expiryTime,
   reference,
+  pollStatus = true,
 }) => {
   const [timeLeft, setTimeLeft] = useState(0);
   const statusPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -103,7 +105,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   }, [effectiveExpiryTime, currentStatus, setWalletIsExpired]);
 
   useEffect(() => {
-    if (!reference || hasWalletExpired()) {
+    if (!pollStatus || !reference || hasWalletExpired()) {
       clearStatusPoll();
       return;
     }
@@ -164,6 +166,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     };
   }, [
     reference,
+    pollStatus,
     patchStatus,
     currentStatus,
     hasWalletExpired,

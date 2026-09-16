@@ -1,4 +1,5 @@
 import api from "./api-client";
+import { normalizeGiftId } from "./gift-flow";
 
 // Maps chat app network names to payment engine network names
 const NETWORK_MAP: Record<string, string> = {
@@ -31,6 +32,7 @@ function mapPaymentNetwork(crypto: string | undefined, network: string): string 
 
 export interface EnginePayment {
   reference: string;
+  giftId?: string | null;
   type: string;
   depositAddress: string | null;
   cryptoAmount: number | null;
@@ -234,10 +236,10 @@ export async function createManualPayment(input: ManualPaymentInput): Promise<En
 }
 
 export async function claimGift(
-  reference: string,
+  giftId: string,
   input: ClaimGiftInput
 ): Promise<void> {
-  await api.post(`/api/payments/gifts/${reference}/claim`, {
+  await api.post(`/api/payments/gifts/${normalizeGiftId(giftId)}/claim`, {
     bankCode: input.bankCode,
     accountNumber: input.accountNumber,
   });
