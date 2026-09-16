@@ -24,6 +24,7 @@ import {
   fulfillRequest,
 } from "@/services/enginePaymentService";
 import { engineGet, enginePost } from "@/lib/settle-client";
+import { buildGiftCreationResponse, getConfirmedGiftId, normalizeGiftId } from "@/services/gift-flow";
 import { chat } from "googleapis/build/src/apis/chat";
 import {
   isValidInternationalPhoneNumber,
@@ -115,6 +116,7 @@ interface PaymentResponse {
   payment: {
     id: string;
     reference: string;
+    giftId?: string | null;
     type: string;
     status: string;
     depositAddress: string | null;
@@ -1009,7 +1011,7 @@ function resolveCreationSuccessReply(session: Sess): string | null {
   }
 
   if (session.type === "gift" && !isClaimGift) {
-    return `You are sending ${session.totalcrypto} ${session.crypto} to this wallet address ${session.wallet_address} and recipient will be receiving ₦${session.amountString} Gift_id: ${session.id}.`;
+    return `You are sending ${session.totalcrypto} ${session.crypto} and the recipient will receive ₦${session.amountString}. Your gift ID will appear after payment confirmation.`;
   }
 
   if (session.type === "request" && isRequestFulfillment) {
@@ -1361,12 +1363,12 @@ function paymentCopyableItems(
           },
         ]
       : []),
-    {
+    ...(paymentType === "gift" ? [] : [{
       label: idLabel,
       text: payment.reference,
       reference: payment.reference,
       paymentType,
-    },
+    }]),
   ];
 }
 
@@ -1457,15 +1459,13 @@ export default async function handler(
       updatedSession.wallet_address = payment.depositAddress;
       updatedSession.amountString = payment.fiatAmount;
       updatedSession.id = payment.reference;
+      updatedSession.paymentReference = payment.reference;
+      updatedSession.giftId = getConfirmedGiftId(payment);
       updatedSession.verifier = true;
 
-      const reply = `You are sending ${updatedSession.totalcrypto} ${updatedSession.crypto} and the recipient will receive ₦${updatedSession.amountString}.`;
       session[chatId] = {};
       userHistories.set(chatId, []);
-      return res.status(200).json({
-        reply,
-        copyableItems: paymentCopyableItems(payment, "gift", "Gift ID"),
-      });
+      return res.status(200).json(buildGiftCreationResponse(payment, updatedSession.crypto));
     } catch (error) {
       console.error("Create gift from form error:", error);
       const { status, body } = getFormErrorResponse(error);
@@ -1543,9 +1543,9 @@ export default async function handler(
 
   if (claimGiftForm) {
     try {
-      const giftId = normalizeReference(claimGiftForm.giftId, "gift ID");
+      const giftId = normalizeGiftId(claimGiftForm.giftId);
       normalizeBankForm(claimGiftForm as ClaimGiftFormPayload);
-      const result = await engineGet<PaymentResponse>(`/payments/${giftId}`);
+      const result = await engineGet<PaymentResponse>(`/payments/gifts/${giftId}`);
       const status = result.payment.status?.toLowerCase();
 
       if (result.payment.type !== "gift") {
@@ -1565,6 +1565,7 @@ export default async function handler(
         claimGiftMode: true,
         giftReadyToClaim: true,
         id: giftId,
+        giftId,
         bank_name: bank.bankName,
         bankcode: bank.bankCode,
         acct_number: bank.accountNumber,
@@ -2048,7 +2049,7 @@ export default async function handler(
         showClaimGiftForm: true,
         claimGiftFormId: updatedSession.claimGiftFormId,
         claimGiftFormDefaults: {
-          giftId: updatedSession.id ?? "",
+          giftId: updatedSession.giftId ?? updatedSession.id ?? "",
           bankName: updatedSession.bank_name ?? "",
           bankCode: updatedSession.bankcode ?? "",
           accountNumber: updatedSession.acct_number ?? "",
@@ -2185,8 +2186,10 @@ export default async function handler(
     ) {
       try {
         console.log("checking gift id before claim.......");
+        const giftId = normalizeGiftId(updatedSession.giftId ?? updatedSession.id);
+        updatedSession.giftId = giftId;
         const result = await engineGet<PaymentResponse>(
-          `/payments/${updatedSession.id}`,
+          `/payments/gifts/${giftId}`,
         );
         const status = result.payment.status?.toLowerCase();
 
@@ -2301,7 +2304,7 @@ export default async function handler(
           accountNumber: updatedSession.acct_number,
         };
         shouldClearSessionAfterEngineCall = true;
-        await claimGift(updatedSession.id, gift);
+        await claimGift(updatedSession.giftId, gift);
         updatedSession.reply = `Your gift claim is successful. The payout will be sent to ${updatedSession.receiver_name}, ${updatedSession.bank_name} ${updatedSession.acct_number}.`;
       } catch (error: any) {
         console.error("Claim gift error:", error?.response?.data ?? error);
@@ -2398,7 +2401,12 @@ export default async function handler(
         updatedSession.wallet_address = payment.depositAddress;
         updatedSession.amountString = payment.fiatAmount;
         updatedSession.id = payment.reference;
+        updatedSession.paymentReference = payment.reference;
+        updatedSession.giftId = getConfirmedGiftId(payment);
         updatedSession.verifier = true;
+        session[chatId] = {};
+        userHistories.set(chatId, []);
+        return res.status(200).json(buildGiftCreationResponse(payment, updatedSession.crypto));
       } else if (updatedSession.type === "request") {
         const user: CreateRequestPaymentInput = {
           type: "request",

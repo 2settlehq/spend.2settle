@@ -5,6 +5,7 @@ import { useBankStore } from "stores/bankStore";
 import useChatStore, { MessageType } from "stores/chatStore";
 import { usePaymentStore } from "stores/paymentStore";
 import { useTransactionStore } from "stores/transactionStore";
+import { useStatusStore } from "stores/statusStore";
 
 export const displaySendPayment = async () => {
   console.log("Displaying send payment message...");
@@ -164,17 +165,18 @@ export const displaySendPayment = async () => {
         },
         timestamp: new Date(),
       },
-      {
-        type: "incoming",
-        intent: {
-          kind: "component",
-          name: "CopyableText",
-          props: { text: transactionId, label: "Transaction ID" },
-          persist: true,
-        },
-        timestamp: new Date(),
-      },
     );
+
+    messages.push({
+      type: "incoming",
+      intent: {
+        kind: "component",
+        name: "CopyableText",
+        props: { text: transactionId, label: "Transaction ID" },
+        persist: true,
+      },
+      timestamp: new Date(),
+    });
 
     if (isTransfer) {
       messages.push({
@@ -207,11 +209,32 @@ export const displaySendPayment = async () => {
       intent: {
         kind: "component",
         name: "CountdownTimer",
-        props: { expiryTime: walletExpiryTime, reference: transactionId },
+        props: { expiryTime: walletExpiryTime, reference: transactionId, pollStatus: !isGift },
         persist: true,
       },
       timestamp: new Date(),
     });
+
+    if (isGift) {
+      const fundingStatus = useStatusStore.getState().statusesByReference[transactionId];
+      messages.push({
+        type: "incoming",
+        intent: {
+          kind: "component",
+          name: "GiftCode",
+          props: {
+            payment: {
+              reference: transactionId,
+              status: fundingStatus?.status ?? "pending",
+              giftId: fundingStatus?.giftId ?? null,
+              expiresAt: walletLastAssignedTime,
+            },
+          },
+          persist: true,
+        },
+        timestamp: new Date(),
+      });
+    }
   }
 
   addMessages(messages);

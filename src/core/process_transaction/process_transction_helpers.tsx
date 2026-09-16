@@ -15,6 +15,8 @@ import { usePaymentStore } from "stores/paymentStore";
 import { useStatusStore } from "stores/statusStore";
 import { useTransactionStore } from "stores/transactionStore";
 import { useUserStore } from "stores/userStore";
+import { getConfirmedGiftId } from "@/services/gift-flow";
+import type { PaymentLifecycleStatus } from "stores/statusStore";
 
 export async function processTransaction() {
   const currentStep = useChatStore.getState().currentStep;
@@ -120,7 +122,7 @@ export async function processTransaction() {
       });
 
       setTransactionId(payment.reference);
-      setGiftId(payment.reference);
+      setGiftId(getConfirmedGiftId(payment) ?? "");
       setActiveWallet(payment.depositAddress ?? "");
       setPaymentAssetEstimate(String(payment.cryptoAmount ?? ""));
       setPaymentNairaEstimate(String(payment.fiatAmount ?? fiatAmount));
@@ -128,7 +130,8 @@ export async function processTransaction() {
       setActiveReference(payment.reference);
       upsertStatus({
         reference: payment.reference,
-        status: "pending",
+        status: payment.status as PaymentLifecycleStatus,
+        giftId: getConfirmedGiftId(payment),
         type: payment.type,
         expiresAt: payment.expiresAt,
       });
