@@ -1,6 +1,6 @@
 "use client";
 
-import type React from "react";
+import React, { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,16 @@ import {
 import { signIn } from "next-auth/react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { useState } from "react";
 
 export default function LoginPage() {
   const router = useRouter();
   const { error: routeError } = router.query;
+  const requestedCallbackUrl = router.query.callbackUrl;
+  const callbackUrl = typeof requestedCallbackUrl === "string" &&
+    requestedCallbackUrl.startsWith("/") &&
+    !requestedCallbackUrl.startsWith("//")
+      ? requestedCallbackUrl
+      : "/";
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -57,7 +62,7 @@ export default function LoginPage() {
         phone,
         password,
         redirect: false,
-        callbackUrl: "/",
+        callbackUrl,
       });
 
       if (result?.error) {
@@ -167,7 +172,7 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={() => signIn("google", { callbackUrl: "/" })}
+                onClick={() => signIn("google", { callbackUrl })}
               >
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                   <path

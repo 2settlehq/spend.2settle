@@ -59,6 +59,8 @@ IMPORTANT VALIDATION RULES:
 - For fulfill request, do not ask for Asset, Network, or Estimation until "Request fulfillment" is "yes".
 - If "Request fulfillment" is "no" and Reply contains an invalid/unavailable request id message, say only that Reply and ask the user to retype the request id.
 - For claim gift, do not ask for bank details until "Gift ready to claim" is "yes". Ask for the gift id first.
+- Gift payment references are internal tracking identifiers, not gift IDs. Never display or suggest sharing a payment reference as a gift ID.
+- Do not invent a gift ID or display one before funding is confirmed. A shareable gift ID must come from the confirmed payment's giftId field.
 
 
 1. Asset (BTC/Bitcoin, ETH/Ethereum, BNB/Binance token, TRON/TRX, USDT/Tether)
@@ -83,7 +85,7 @@ if a user want to  send gift  to their friends, family or anybody
 3. Estimation type: crypto, naira, or dollar
 4. Amount
 5. phone number
-6.after phone number then display you are sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} to this wallet address ${updatedSession.wallet_address} and recipient will be receiving ₦${updatedSession["amountString"]} Gift_id: ${updatedSession.id}.
+6. After phone number, display that the user is sending ${updatedSession["totalcrypto"]} ${updatedSession.crypto} and the recipient will receive ₦${updatedSession["amountString"]}. Show the deposit instructions, but do not show a gift ID yet. Tell them the gift ID will appear after payment confirmation. The UI will display the confirmed payment's giftId for sharing.
 
 THIS IS THE SECTION FOR CREATE REQUEST, IF USER WANT TO REQUEST FOR PAYMENT
 1.Enter the amount you want to request in Naira

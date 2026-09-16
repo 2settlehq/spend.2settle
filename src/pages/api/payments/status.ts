@@ -3,6 +3,7 @@ import { engineGet } from "@/lib/settle-client";
 
 interface EnginePaymentStatus {
   reference: string;
+  giftId?: string | null;
   type: string;
   status: string;
   txHash?: string | null;
@@ -46,6 +47,7 @@ export default async function handler(
       payment: {
         reference: result.payment.reference,
         type: result.payment.type,
+        giftId: result.payment.giftId ?? null,
         status: result.payment.status,
         txHash: result.payment.txHash ?? null,
         confirmations: result.payment.confirmations ?? null,

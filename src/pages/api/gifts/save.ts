@@ -1,22 +1,4 @@
-import { saveGiftTransaction } from "@/services/transactionService/giftService/helpers/saveGift";
-import { giftSchema } from "@/validation/schemas";
 import type { NextApiRequest, NextApiResponse } from "next";
-
-// export default async function handler(
-//   req: NextApiRequest,
-//   res: NextApiResponse,
-// ) {
-//   if (req.method !== "POST") {
-//     return res.status(405).json({ error: "Method not allowed" });
-//   }
-
-//   try {
-//     const giftId = await saveGiftTransaction(req.body);
-//     return res.status(200).json({ giftId });
-//   } catch (err: any) {
-//     return res.status(500).json({ error: err.message });
-//   }
-// }
 
 export default async function handler(
   req: NextApiRequest,
@@ -26,19 +8,9 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const parsed = giftSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    return res.status(400).json({
-      error: "Invalid gift input",
-      details: parsed.error.flatten(),
-    });
-  }
-
-  try {
-    const giftId = await saveGiftTransaction(parsed.data);
-    return res.status(200).json({ giftId });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
+  // Gift IDs may only be issued by the payment engine after funding confirms.
+  // Never recreate existing gifts or issue unpaid claim codes through this route.
+  return res.status(410).json({
+    error: "This gift creation endpoint is no longer available. Create a gift payment through /api/payments; its gift ID is issued after payment confirmation.",
+  });
 }

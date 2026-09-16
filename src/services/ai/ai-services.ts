@@ -1,5 +1,6 @@
 import { apiURL } from "@/constants/constants";
 import axios from "axios";
+import type { GiftPaymentTracking } from "../gift-flow";
 
 interface StreamAxiosLikeError {
   message: string;
@@ -92,6 +93,7 @@ export interface ReportFormData {
 
 export interface GemResponseType {
   reply: string;
+  giftPayment?: GiftPaymentTracking;
   copyableItems?: GemCopyableItem[];
   claimGiftMode?: boolean;
   showTransferForm?: boolean;

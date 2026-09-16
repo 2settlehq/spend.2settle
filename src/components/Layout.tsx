@@ -54,9 +54,7 @@ export default function Layout({ children }: Props) {
       <main role="main" className="flex-grow">
         {children}
       </main>
-      <footer>
-        <Footer />
-      </footer>
+      <Footer />
     </div>
   );
 }
