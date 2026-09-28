@@ -49,3 +49,6 @@ CLAUDE*
 # .playwright-mcp
 
 .env*
+
+# Local Codex configuration
+/.codex/config.toml
