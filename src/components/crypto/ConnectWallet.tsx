@@ -23,12 +23,28 @@ import {
   listenForTronUnlock,
 } from "@/helpers/tron/connect_tron_wallet";
 import { useState } from "react";
+import { toast } from "@/hooks/use-toast";
+import { probeWalletConnectRelay } from "@/lib/wallets/walletConnectRelay";
 
 const ConnectWallet = () => {
   const { isConnected } = useAccount();
   const { isConnected: isBTCConnected } = useBTCWallet();
   const { connected: isTronConnected } = useTronWallet();
   const [tronPending, setTronPending] = useState(false);
+
+  // Browser-extension wallets (MetaMask etc.) don't need the relay, so warn
+  // rather than block when WalletConnect can't be reached.
+  const warnIfRelayBlocked = async (open: boolean) => {
+    if (!open || isConnected) return;
+    if ((await probeWalletConnectRelay()) === "blocked") {
+      toast({
+        title: "Can't reach WalletConnect",
+        description:
+          "Your network, ad blocker or VPN is blocking WalletConnect. Disable it, switch networks, or use a browser-extension wallet like MetaMask.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleTronConnect = async () => {
     try {
@@ -46,7 +62,7 @@ const ConnectWallet = () => {
   };
 
   return (
-    <Dialog>
+    <Dialog onOpenChange={warnIfRelayBlocked}>
       <DialogTrigger asChild>
         {isConnected ? (
           <ConnectButton />
