@@ -166,16 +166,28 @@ export default function CryptoTransactionForm() {
     try {
       setIsSubmitting(true);
 
+      const currentRate = parseFloat(formData.currentRate);
+      const profitRate = parseFloat(formData.profitRate) || 0;
+
       await createManualPayment({
-        fiatAmount: parseFloat(formData.receiverAmount),
+        estimation: formData.estimation as "naira" | "dollar" | "crypto",
+        amount: parseFloat(formData.amount),
+        receiverAmount: parseFloat(formData.receiverAmount),
         crypto: formData.asset.split("-")[0],
         network: mapNetwork(formData.network),
-        cryptoAmount: parseFloat(formData.cryptoSent),
+        cryptoSent: parseFloat(formData.cryptoSent),
+        charge: parseFloat(formData.charge) || 0,
+        currentRate,
+        merchantRate: currentRate + profitRate,
+        profitRate,
         walletAddress: formData.walletAddress as string,
+        transactionDate: formData.transactionDate.toISOString(),
         payer: { phone: formatPhoneNumber(formData.customerNumber) },
         receiver: {
           bankCode: formData.bankCode,
+          bankName: formData.bankName,
           accountNumber: formData.accountNumber,
+          accountName: formData.accountName,
         },
       });
 

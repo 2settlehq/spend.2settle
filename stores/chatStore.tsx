@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import React from "react";
 import { StepId } from "@/core/machines/steps";
 import elementToJSXString from "react-element-to-jsx-string";
 import parse from "html-react-parser";

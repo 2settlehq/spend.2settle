@@ -2,9 +2,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import ChatBot from "../../core/ChatBot";
-import SendMoney from "./SendMoney";
+import SendMoney, { type SpendAmountValues } from "./SendMoney";
 import { formatCurrency } from "../../helpers/format_currency";
 import { Button } from "@/components/ui/button";
 import ErrorBoundary from "../social/telegram/TelegramError";
@@ -13,6 +14,7 @@ import useTotalVolume from "@/hooks/dashboard/useTotalVolume";
 import Maintenance from "./Maintenance";
 import DisplayTransactions from "./DisplayTransactions";
 import { usePaymentStore } from "stores/paymentStore";
+import useChatStore from "stores/chatStore";
 
 export const useMediaQuery = (query: string) => {
   const [matches, setMatches] = useState(false);
@@ -160,14 +162,16 @@ export default function Body() {
     const launcherSize =
       isMobile || isTab ? "h-16 w-16" : isDeskTop ? "h-28 w-28" : "h-24 w-24";
 
-    if (isOpen && isMobile) return null;
+    if (!isClient || typeof document === "undefined" || (isOpen && isMobile)) {
+      return null;
+    }
 
-    return (
+    const launcher = (
       <Button
-        className={`fixed right-8 z-50 overflow-visible rounded-full p-0 transition-transform focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 ${
+        className={`chat-launcher-position fixed right-4 z-[100] overflow-visible rounded-full p-0 transition-transform focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50 sm:right-8 ${
           isOpen
-            ? "bottom-4 h-[72px] w-[72px] bg-blue-500 shadow-lg hover:bg-blue-500"
-            : `bottom-8 ${launcherSize} chat-launcher-float transform bg-transparent shadow-none hover:bg-transparent`
+            ? "h-[72px] w-[72px] bg-blue-500 shadow-lg hover:bg-blue-500"
+            : `${launcherSize} chat-launcher-float transform bg-transparent shadow-none hover:bg-transparent`
         }`}
         onClick={() => setIsOpen(!isOpen)}
         aria-label={isOpen ? "Close chat" : "Open chat"}
@@ -199,6 +203,36 @@ export default function Body() {
         )}
       </Button>
     );
+
+    // Render outside Body's overflow-hidden container so mobile browsers keep
+    // the launcher anchored to the viewport instead of the page content.
+    return createPortal(launcher, document.body);
+  };
+
+  const openTransferWithAmount = ({
+    amount,
+    estimation,
+  }: SpendAmountValues) => {
+    const formId = `home-transfer-${Date.now()}`;
+
+    useChatStore.getState().addMessages([
+      {
+        type: "incoming",
+        content: <span>Complete your transfer details below.</span>,
+        intent: {
+          kind: "component",
+          name: "TransferForm",
+          props: {
+            initialValues: { amount, estimation },
+            formId,
+          },
+          persist: true,
+        },
+        timestamp: new Date(),
+      },
+    ]);
+
+    setIsOpen(true);
   };
 
   return (
@@ -267,13 +301,12 @@ export default function Body() {
           </p>
         )}
 
-        <div className="flex flex-col sm:flex-row justify-center mt-4 space-y-4 sm:space-y-0 sm:space-x-4 mb-5">
-          <Button
-            className="px-4 py-2 bg-blue-500 text-white rounded-full w-full sm:w-auto hover:bg-blue-500"
-            onClick={() => setIsOpen(true)}
-          >
-            {isClient ? <SendMoney /> : "Spend Money"}
-          </Button>
+        <div className="mb-5 mt-4 flex w-full justify-center px-2">
+          {isClient ? (
+            <SendMoney onSubmit={openTransferWithAmount} />
+          ) : (
+            <div className="h-11 w-full max-w-[21rem] animate-pulse rounded-full bg-white/70" />
+          )}
         </div>
 
         <div className="text-center bg-white font-Poppins  text-black  px-8 py-2 rounded-full shadow-lg mb-6 border-2 border-white">
