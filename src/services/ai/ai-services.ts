@@ -99,6 +99,7 @@ export interface DebitablePayment {
   depositAddress: string | null;
   cryptoAmount: number | null;
   expiresAt?: string | null;
+  cancelToken?: string;
 }
 
 export interface GemResponseType {

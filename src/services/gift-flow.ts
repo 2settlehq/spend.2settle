@@ -54,6 +54,7 @@ export function buildGiftCreationResponse(payment: EnginePayment, crypto: string
       depositAddress: payment.depositAddress,
       cryptoAmount: payment.cryptoAmount,
       expiresAt: payment.expiresAt,
+      cancelToken: payment.cancelToken,
     },
   };
 }

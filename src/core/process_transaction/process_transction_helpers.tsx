@@ -1,3 +1,4 @@
+import { debitFailureMessage } from "@/features/chatbot/helpers/debitFailureMessage";
 import { displayGiftFeedbackMessage } from "@/features/chatbot/handlers/chatHandlers/menus/display.gift.transaction.confirmation";
 import { displaySendPayment } from "@/features/chatbot/handlers/chatHandlers/menus/display.send.payment";
 import {
@@ -104,19 +105,10 @@ export async function processTransaction({
       displaySendPayment({ txHash });
     } catch (error) {
       console.error("Error debiting connected wallet:", error);
-      const reason =
-        error instanceof Error ? error.message : "The wallet transaction failed";
       addMessages([
         {
           type: "incoming",
-          content: (
-            <span>
-              We could not complete the debit from your wallet: {reason}
-              <br />
-              Say Hi to start again. If your wallet shows the transaction as
-              sent, contact support with reference <b>{payment.reference}</b>.
-            </span>
-          ),
+          content: debitFailureMessage(error, payment.reference),
           timestamp: new Date(),
         },
       ]);

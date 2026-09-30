@@ -21,7 +21,9 @@ export function useSpendEVMUSDT() {
   const spendEVMUSDT = async (
     receiver: Address,
     amount: bigint,
-    isERC20 = false
+    isERC20 = false,
+    // Called once the wallet has signed and broadcast (before confirmation)
+    onSubmitted?: (hash: string) => void
   ): Promise<TransactionReceipt | null> => {
     if (!caller) {
       setError(new Error("Wallet not connected"));
@@ -43,6 +45,7 @@ export function useSpendEVMUSDT() {
         args: [receiver, amount],
         chainId: chain.id,
       });
+      onSubmitted?.(hash);
 
       // Wait for transaction to be mined
       const { waitForTransactionReceipt } = await import("wagmi/actions");

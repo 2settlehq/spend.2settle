@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { enginePost } from "@/lib/settle-client";
+import { withCancelToken } from "@/lib/paymentCancelToken";
 import {
   REQUEST_LIMITS_CRYPTO,
   REQUEST_LIMITS_ESTIMATE_ASSET,
@@ -61,7 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!amountIsValid) return;
 
     const result = await enginePost("/payments", req.body);
-    return res.status(201).json(result);
+    // Lets the creator close the session if the wallet debit doesn't happen
+    return res.status(201).json(withCancelToken(result));
   } catch (error: any) {
     console.error(
       "Payment creation error:",
