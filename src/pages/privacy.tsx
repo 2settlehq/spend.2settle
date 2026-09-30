@@ -1,3 +1,4 @@
+import React from "react";
 import Head from "next/head";
 import Layout from "../components/Layout";
 
@@ -14,13 +15,17 @@ export default function PrivacyPolicy() {
         />
       </Head>
       <Layout>
-        <div className="max-w-3xl mx-auto px-4 py-12 sm:py-16">
-          <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-          <p className="text-sm text-gray-500 mb-10">
-            Last updated: {lastUpdated}
-          </p>
+        <article className="mx-auto max-w-4xl px-5 py-10 text-gray-800 sm:px-8 sm:py-14">
+          <header className="mb-9 border-b border-gray-200 pb-7">
+            <h1 className="text-3xl font-bold leading-tight text-[#315ba4] sm:text-4xl">
+              Privacy Policy
+            </h1>
+            <p className="mt-4 text-sm leading-6 text-gray-500">
+              Last updated: {lastUpdated}
+            </p>
+          </header>
 
-          <section className="mb-8">
+          <section className="space-y-4 text-sm leading-7 sm:text-base">
             <p>
               This Privacy Policy explains how 2Settle (&quot;2Settle&quot;,
               &quot;we&quot;, &quot;us&quot;) collects, uses, discloses, and
@@ -29,21 +34,21 @@ export default function PrivacyPolicy() {
               applies to our web app, Telegram integration, and API-based
               integrations with partners.
             </p>
-            <p className="mt-3 text-sm text-gray-500">
+            <p>
               2Settle is operated by 2SettleHQ, the data controller for the
               purposes of this policy, registered at Plot 690, Idris Gadoda
               Street, Wuye, Abuja.
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               1. Data We Collect
             </h2>
             <p className="mb-2">
               We collect the following categories of personal data:
             </p>
-            <ul className="list-disc pl-6 space-y-1">
+            <ul className="list-disc space-y-1 pl-6">
               <li>
                 <strong>Identity &amp; contact data:</strong> email address
                 or phone number (used for one-time-code login), name
@@ -74,11 +79,11 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               2. How We Use Your Data
             </h2>
-            <ul className="list-disc pl-6 space-y-1">
+            <ul className="list-disc space-y-1 pl-6">
               <li>To process and settle your transfers, gifts, payment requests, and payouts</li>
               <li>To authenticate you (one-time codes, wallet-signature login, Google Sign-In) without ever storing a password</li>
               <li>To detect and prevent fraud, and to secure our platform (rate limiting, audit logging, deposit monitoring)</li>
@@ -87,8 +92,8 @@ export default function PrivacyPolicy() {
             </ul>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               3. Legal Basis for Processing
             </h2>
             <p>
@@ -102,12 +107,12 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               4. Who We Share Data With
             </h2>
             <p className="mb-2">We share data only where necessary to complete your transaction or run the service:</p>
-            <ul className="list-disc pl-6 space-y-1">
+            <ul className="list-disc space-y-1 pl-6">
               <li>Settlement and payout partners, to complete a bank transfer on your behalf</li>
               <li>Blockchain networks, inherently public once a transaction is broadcast on-chain</li>
               <li>Service providers who support our infrastructure (hosting, exchange-rate data)</li>
@@ -121,11 +126,11 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               5. How We Protect Your Data
             </h2>
-            <ul className="list-disc pl-6 space-y-1">
+            <ul className="list-disc space-y-1 pl-6">
               <li>Sensitive credentials (API secrets, one-time codes, session tokens) are never stored in plaintext, only as cryptographic hashes</li>
               <li>Wallet key material is encrypted at rest and only decrypted in memory when needed</li>
               <li>All data in transit is protected with TLS encryption</li>
@@ -133,8 +138,8 @@ export default function PrivacyPolicy() {
             </ul>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               6. How Long We Keep Your Data
             </h2>
             <p>
@@ -147,8 +152,8 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               7. Your Rights
             </h2>
             <p className="mb-2">
@@ -156,7 +161,7 @@ export default function PrivacyPolicy() {
               Protection Act/NDPR, and GDPR where it applies to you), you
               have the right to:
             </p>
-            <ul className="list-disc pl-6 space-y-1">
+            <ul className="list-disc space-y-1 pl-6">
               <li>Request access to the personal data we hold about you</li>
               <li>Request correction of inaccurate data</li>
               <li>Request deletion of your data, where we are not required to retain it for legal or financial recordkeeping reasons</li>
@@ -164,7 +169,7 @@ export default function PrivacyPolicy() {
             </ul>
             <p className="mt-3">
               To exercise any of these rights, contact us at{" "}
-              <a href="mailto:compliance@2settle.io" className="underline">
+              <a href="mailto:compliance@2settle.io" className="font-medium text-[#315ba4] underline underline-offset-2">
                 compliance@2settle.io
               </a>
               . We will respond within the timeframe required by applicable
@@ -172,8 +177,8 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               8. Children&apos;s Privacy
             </h2>
             <p>
@@ -183,8 +188,8 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-3">
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">
               9. Changes to This Policy
             </h2>
             <p>
@@ -194,18 +199,18 @@ export default function PrivacyPolicy() {
             </p>
           </section>
 
-          <section>
-            <h2 className="text-xl font-semibold mb-3">10. Contact Us</h2>
+          <section className="mt-9 scroll-mt-8 text-sm leading-7 sm:text-base">
+            <h2 className="mb-4 text-xl font-semibold leading-7 text-[#315ba4] sm:text-2xl">10. Contact Us</h2>
             <p>
               If you have questions about this Privacy Policy or how your
               data is handled, contact us at{" "}
-              <a href="mailto:compliance@2settle.io" className="underline">
+              <a href="mailto:compliance@2settle.io" className="font-medium text-[#315ba4] underline underline-offset-2">
                 compliance@2settle.io
               </a>
               .
             </p>
           </section>
-        </div>
+        </article>
       </Layout>
     </>
   );

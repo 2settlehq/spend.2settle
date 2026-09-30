@@ -195,44 +195,77 @@ export async function verifyReceiver(input: ClaimGiftInput): Promise<void> {
 }
 
 export interface ManualPaymentInput {
-  fiatAmount: number;
+  estimation: "naira" | "dollar" | "crypto";
+  amount: number;
+  receiverAmount: number;
   crypto: string;
   network: string;
-  cryptoAmount: number;
+  cryptoSent: number;
+  charge: number;
+  currentRate: number;
+  merchantRate: number;
+  profitRate: number;
   /** Payer's sending wallet address */
   walletAddress: string;
-  /** Optional blockchain tx hash to record against the settled payment */
-  txHash?: string;
-  /** Optional internal settlement/disbursement reference */
-  settlementReference?: string;
+  transactionDate: string;
   payer: { phone: string };
-  receiver: { bankCode: string; accountNumber: string };
+  receiver: {
+    bankCode: string;
+    bankName: string;
+    accountNumber: string;
+    accountName?: string;
+  };
 }
 
-export async function createManualPayment(input: ManualPaymentInput): Promise<EnginePayment> {
-  const response = await api.post<{ success: boolean; payment: EnginePayment }>(
-    "/api/payments",
-    {
-      type: "transfer",
-      autoSettle: true,
-      fiatAmount: input.fiatAmount,
-      fiatCurrency: "NGN",
-      crypto: mapCrypto(input.crypto),
-      network: mapPaymentNetwork(input.crypto, input.network),
-      cryptoAmount: input.cryptoAmount,
-      txHash: input.txHash,
-      settlementReference: input.settlementReference,
-      payer: {
-        chatId: input.payer.phone,
-        phone: input.payer.phone,
-        walletAddress: input.walletAddress,
-      },
-      receiver: input.receiver,
-      chargeFrom: "fiat",
-    }
-  );
+export interface ManualPaymentResult {
+  success: boolean;
+  transferId: number;
+  reference: string;
+}
 
-  return response.data.payment;
+export async function createManualPayment(
+  input: ManualPaymentInput,
+): Promise<ManualPaymentResult> {
+  const totalDollar = input.estimation === "dollar"
+    ? input.amount
+    : input.receiverAmount / input.currentRate;
+  const assetPrice = input.cryptoSent > 0 ? totalDollar / input.cryptoSent : 0;
+
+  const response = await api.post<ManualPaymentResult>("/api/transfer/save", {
+    crypto: mapCrypto(input.crypto),
+    network: mapNetwork(input.network),
+    estimate_asset: input.estimation,
+    estimate_amount: String(input.amount),
+    amount_payable: String(input.receiverAmount),
+    crypto_amount: String(input.cryptoSent),
+    charges: String(input.charge),
+    date: input.transactionDate,
+    current_rate: String(input.currentRate),
+    merchant_rate: String(input.merchantRate),
+    profit_rate: String(input.profitRate),
+    wallet_address: input.walletAddress,
+    status: "Successful",
+    payer: {
+      chat_id: input.payer.phone,
+      customer_phoneNumber: input.payer.phone,
+    },
+    receiver: {
+      acct_number: input.receiver.accountNumber,
+      bank_code: input.receiver.bankCode,
+      bank_name: input.receiver.bankName,
+      receiver_name: input.receiver.accountName,
+    },
+    summary: {
+      transaction_type: "transfer",
+      total_dollar: String(totalDollar),
+      total_naira: String(input.receiverAmount),
+      effort: String(input.charge),
+      asset_price: String(assetPrice),
+      status: "Successful",
+    },
+  });
+
+  return response.data;
 }
 
 export async function claimGift(

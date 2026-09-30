@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 
 const phrases = ["Transfer Money", "Make Payment"];
 
@@ -38,8 +39,15 @@ export default function FooterTypingText() {
   }, [text, phraseIndex, phase, reducedMotion]);
 
   return (
-    <p className="min-h-6 max-w-[220px] text-sm leading-5 text-white sm:max-w-none sm:pr-6 sm:text-base" aria-label="@2SettleHQ: Transfer Money or Make Payment">
-      <span className="text-white/75">@2SettleHQ | </span>
+    <p className="min-h-5 max-w-[220px] text-xs leading-4 text-white sm:max-w-none sm:pr-3 sm:text-sm" aria-label="@2SettleHQ: Transfer Money or Make Payment">
+      <Link
+        href="/rates"
+        className="rounded-sm text-white/75 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        aria-label="Manage 2Settle rates"
+      >
+        @2SettleHQ
+      </Link>
+      <span className="text-white/75" aria-hidden="true"> | </span>
       <span aria-hidden="true">{reducedMotion ? phrases.join(" / ") : text}</span>
       {!reducedMotion && <span aria-hidden="true" className="ml-0.5 inline-block animate-blink text-white">|</span>}
     </p>
