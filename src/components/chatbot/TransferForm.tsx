@@ -13,6 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { handleTransferFormSubmission } from "@/features/chatbot/handlers/chatHandlers/handle.ai.chat";
+import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
+import { useFormWalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
+import { WalletAssetNotice } from "@/components/chatbot/WalletAssetNotice";
 import {
   getPhoneCountry,
   normalizeInternationalPhoneNumber,
@@ -104,6 +107,14 @@ export default function TransferForm({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const { walletName, isAssetSupported, isUsdtNetworkSupported } =
+    useSupportedAssets();
+  const getWalletDebit = useFormWalletDebit();
+  // Only offer what the connected wallet can pay with (everything if none)
+  const cryptoOptions = CRYPTO_OPTIONS.filter((crypto) =>
+    isAssetSupported(crypto.value),
+  );
+  const usdtNetworks = USDT_NETWORKS.filter(isUsdtNetworkSupported);
   const selectedPhoneCountry = getPhoneCountry(form.phoneCountry);
   const internationalPhoneNumber = normalizeInternationalPhoneNumber(
     form.phoneCountry,
@@ -126,6 +137,27 @@ export default function TransferForm({
     }
   }, [formId]);
 
+  // Drop a preset (e.g. from the AI) or selection the wallet can't pay with,
+  // and pick the USDT network when only one is possible
+  const supportedKey = `${cryptoOptions.map((c) => c.value)}|${usdtNetworks}`;
+  useEffect(() => {
+    setForm((current) => {
+      if (current.crypto && !isAssetSupported(current.crypto)) {
+        return { ...current, crypto: "", network: "" };
+      }
+      if (current.crypto !== "USDT") return current;
+      if (current.network && !isUsdtNetworkSupported(current.network)) {
+        return { ...current, network: usdtNetworks.length === 1 ? usdtNetworks[0] : "" };
+      }
+      if (!current.network && usdtNetworks.length === 1) {
+        return { ...current, network: usdtNetworks[0] };
+      }
+      return current;
+    });
+    // supportedKey captures every input of the checks above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supportedKey, form.crypto, form.network]);
+
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
     setError("");
@@ -135,7 +167,12 @@ export default function TransferForm({
     setForm((current) => ({
       ...current,
       crypto,
-      network: crypto === "USDT" ? "" : DEFAULT_NETWORKS[crypto] || "",
+      network:
+        crypto === "USDT"
+          ? usdtNetworks.length === 1
+            ? usdtNetworks[0]
+            : ""
+          : DEFAULT_NETWORKS[crypto] || "",
     }));
     setError("");
   };
@@ -166,10 +203,14 @@ export default function TransferForm({
     }
 
     setIsSubmitting(true);
-    const success = await handleTransferFormSubmission({
-      ...form,
-      phoneNumber: internationalPhoneNumber,
-    });
+    // Debit the connected wallet directly when it can pay this asset
+    const success = await handleTransferFormSubmission(
+      {
+        ...form,
+        phoneNumber: internationalPhoneNumber,
+      },
+      getWalletDebit(form.crypto, form.network),
+    );
     setIsSubmitting(false);
 
     if (success) {
@@ -196,6 +237,10 @@ export default function TransferForm({
       onSubmit={handleSubmit}
       className="grid w-full grid-cols-2 gap-x-2.5 gap-y-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm"
     >
+      <WalletAssetNotice
+        walletName={walletName}
+        hasOptions={cryptoOptions.length > 0}
+      />
       <div className="relative min-w-0 pt-2">
         <Label
           htmlFor="chat-transfer-crypto"
@@ -203,7 +248,11 @@ export default function TransferForm({
         >
           Crypto asset
         </Label>
-        <Select value={form.crypto} onValueChange={handleCryptoChange}>
+        <Select
+          value={form.crypto}
+          onValueChange={handleCryptoChange}
+          disabled={cryptoOptions.length === 0}
+        >
           <SelectTrigger
             id="chat-transfer-crypto"
             className="h-9 px-2.5 text-xs"
@@ -211,7 +260,7 @@ export default function TransferForm({
             <SelectValue placeholder="Select asset" />
           </SelectTrigger>
           <SelectContent>
-            {CRYPTO_OPTIONS.map((crypto) => (
+            {cryptoOptions.map((crypto) => (
               <SelectItem
                 key={crypto.value}
                 value={crypto.value}
@@ -243,7 +292,7 @@ export default function TransferForm({
               <SelectValue placeholder="Select network" />
             </SelectTrigger>
             <SelectContent>
-              {USDT_NETWORKS.map((network) => (
+              {usdtNetworks.map((network) => (
                 <SelectItem
                   key={network}
                   value={network}

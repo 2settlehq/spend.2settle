@@ -1,4 +1,6 @@
 import { apiURL } from "@/constants/constants";
+import { shortWallet } from "@/helpers/ShortenAddress";
+import { useWalletStore } from "@/hooks/wallet/useWalletStore";
 import axios from "axios";
 import type { GiftPaymentTracking } from "../gift-flow";
 
@@ -91,8 +93,17 @@ export interface ReportFormData {
   description: string;
 }
 
+// A created payment, as needed to debit a connected wallet directly
+export interface DebitablePayment {
+  reference: string;
+  depositAddress: string | null;
+  cryptoAmount: number | null;
+  expiresAt?: string | null;
+}
+
 export interface GemResponseType {
   reply: string;
+  payment?: DebitablePayment;
   giftPayment?: GiftPaymentTracking;
   copyableItems?: GemCopyableItem[];
   claimGiftMode?: boolean;
@@ -140,10 +151,20 @@ export const geminiAi = async (
 ): Promise<GemResponseType> => {
   console.log("working", updatedMessages);
   try {
+    // Shown in the greeting: ENS / .bnb name, else the truncated address
+    const { isConnected, address, displayName } = useWalletStore.getState();
+    const walletName = isConnected
+      ? displayName ?? shortWallet(address) ?? undefined
+      : undefined;
+
     const response = await fetch(`${apiURL}/api/ai/geminiApi`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messageText: updatedMessages, chatId: sessionId }),
+      body: JSON.stringify({
+        messageText: updatedMessages,
+        chatId: sessionId,
+        walletName,
+      }),
     });
 
     if (!response.ok) {

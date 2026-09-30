@@ -10,6 +10,7 @@ import useChatStore from "stores/chatStore";
 import { usePaymentStore } from "stores/paymentStore";
 import { useConfirmDialogStore } from "stores/useConfirmDialogStore";
 import { useWalletStore } from "@/hooks/wallet/useWalletStore";
+import { getWalletNetworkError } from "@/lib/wallets/walletNetworks";
 import {
   isWalletConnectedForNetwork,
   useBlockchainPayment,
@@ -47,14 +48,15 @@ const ConfirmAndProceedButton = () => {
   const SHOULD_OPEN_STEP = "sendPayment";
 
   // Use unified wallet store for connection state
-  const { walletType } = useWalletStore();
+  const { walletType, isConnected: isWalletConnected } = useWalletStore();
   const connectedWallet = isWalletConnectedForNetwork();
 
   // Get blockchain payment hook for direct wallet debiting
-  const { executePayment } = useBlockchainPayment();
+  const { debitWallet } = useBlockchainPayment();
 
   /**
-   * Handle blockchain payment - directly debit user's connected wallet
+   * Handle blockchain payment - create the engine payment, then directly
+   * debit user's connected wallet to its deposit address
    */
   const handleBlockchainPayment = async () => {
     console.log("handleBlockchainPayment: Directly debiting user wallet");
@@ -62,15 +64,8 @@ const ConfirmAndProceedButton = () => {
       setLoading(true);
       setWalletFetchError("");
 
-      const result = await executePayment();
-
-      if (!result.success) {
-        console.error("Blockchain payment failed:", result.error);
-        setWalletFetchError(result.error || "Payment failed");
-      } else {
-        console.log("Blockchain payment successful");
-        setHasCopyButtonBeenClicked(true);
-      }
+      await processTransaction({ debitWallet });
+      setHasCopyButtonBeenClicked(true);
     } catch (err) {
       console.error("Error in handleBlockchainPayment:", err);
       setWalletFetchError(
@@ -112,6 +107,12 @@ const ConfirmAndProceedButton = () => {
     if (connectedWallet) {
       // Wallet is connected for this network - directly debit
       await handleBlockchainPayment();
+    } else if (isWalletConnected) {
+      // Wallet is connected but can't pay on this network (e.g. it switched chain)
+      setWalletFetchError(
+        getWalletNetworkError([network ?? ""]) ??
+          "Your connected wallet cannot pay on this network",
+      );
     } else {
       // No wallet connected - manual transfer flow
       await handleManualPayment();

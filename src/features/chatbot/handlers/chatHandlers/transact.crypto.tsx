@@ -6,8 +6,7 @@ import { helloMenu } from "./hello.menu";
 import { displayHowToEstimation } from "./menus/how.to.estimate";
 import { displayNetwork } from "./menus/display.network";
 import { displayEnterPhone } from "./menus/display.phone";
-import { getWalletType } from "@/helpers/transaction/transact_crypto";
-import { useWalletStore } from "@/hooks/wallet/useWalletStore";
+import { getWalletNetworkError } from "@/lib/wallets/walletNetworks";
 
 export const handleTransactCrypto = async (chatInput: string) => {
   const { next, addMessages } = useChatStore.getState();
@@ -18,11 +17,13 @@ export const handleTransactCrypto = async (chatInput: string) => {
     setNetwork,
   } = usePaymentStore.getState();
 
-  const { isConnected, address } = useWalletStore.getState();
-  const walletIsConnected = isConnected;
-
-  const wallet = address;
-  const walletType = getWalletType(wallet);
+  // Blocks assets the connected wallet can't be debited for
+  const rejectForWallet = (networks: string[]) => {
+    const error = getWalletNetworkError(networks);
+    if (!error) return false;
+    addMessages([{ type: "incoming", content: error, timestamp: new Date() }]);
+    return true;
+  };
 
   const isRequest = paymentMode.toLowerCase() === "payrequest";
 
@@ -33,16 +34,7 @@ export const handleTransactCrypto = async (chatInput: string) => {
   } else if (chatInput === "0") {
     helloMenu("hi");
   } else if (chatInput === "1") {
-    if (walletIsConnected && walletType !== "BTC") {
-      addMessages([
-        {
-          type: "incoming",
-          content: `BTC is only supported when BTC wallet is connected. \n Please select the asset of the wallet connected`,
-          timestamp: new Date(),
-        },
-      ]);
-      return;
-    }
+    if (rejectForWallet(["btc"])) return;
 
     setCrypto("BTC");
     setTicker("BTCUSDT");
@@ -54,16 +46,7 @@ export const handleTransactCrypto = async (chatInput: string) => {
     isRequest ? displayEnterPhone() : displayHowToEstimation({ crypto, ticker });
     isRequest ? next({ stepId: "enterPhone" }) : next({ stepId: "payOptions" });
   } else if (chatInput === "2") {
-    if (walletIsConnected && walletType !== "EVM") {
-      addMessages([
-        {
-          type: "incoming",
-          content: `ETH is only supported when ETH wallet is connected. \n Please select the asset of the wallet connected`,
-          timestamp: new Date(),
-        },
-      ]);
-      return;
-    }
+    if (rejectForWallet(["eth"])) return;
 
     setCrypto("ETH");
     setTicker("ETHUSDT");
@@ -98,16 +81,7 @@ export const handleTransactCrypto = async (chatInput: string) => {
   //   isRequest ? next({ stepId: "enterPhone" }) : next({ stepId: "payOptions" });
   // }
   else if (chatInput === "3") {
-    if (walletIsConnected && walletType !== "TRX") {
-      addMessages([
-        {
-          type: "incoming",
-          content: `TRX is only supported when TRX wallet is connected. \n Please select the asset of the wallet connected`,
-          timestamp: new Date(),
-        },
-      ]);
-      return;
-    }
+    if (rejectForWallet(["trx"])) return;
 
     setCrypto("TRX");
     setTicker("TRXUSDT");
@@ -119,16 +93,7 @@ export const handleTransactCrypto = async (chatInput: string) => {
     isRequest ? displayEnterPhone() : displayHowToEstimation({ crypto, ticker });
     isRequest ? next({ stepId: "enterPhone" }) : next({ stepId: "payOptions" });
   } else if (chatInput === "4") {
-    if (walletIsConnected && walletType !== "EVM" && walletType !== "TRX") {
-      addMessages([
-        {
-          type: "incoming",
-          content: `USDT is only supported when ETH or TRX wallet is connected. \n Please select the asset of the wallet connected`,
-          timestamp: new Date(),
-        },
-      ]);
-      return;
-    }
+    if (rejectForWallet(["erc20", "bep20", "trc20"])) return;
     displayNetwork();
     next({ stepId: "network" });
   } else {
