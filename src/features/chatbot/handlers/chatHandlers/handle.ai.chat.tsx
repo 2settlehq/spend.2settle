@@ -1,3 +1,4 @@
+import { debitFailureMessage } from "@/features/chatbot/helpers/debitFailureMessage";
 import {
   ClaimGiftFormData,
   FulfillRequestFormData,
@@ -250,19 +251,10 @@ const completeFormPayment = async (
     addMessages(buildDebitedReplyMessages(reply, walletDebit, txHash));
   } catch (error) {
     console.error("Error debiting connected wallet:", error);
-    const reason =
-      error instanceof Error ? error.message : "The wallet transaction failed";
     addMessages([
       {
         type: "incoming",
-        content: (
-          <span>
-            We could not complete the debit from your wallet: {reason}
-            <br />
-            Please try again. If your wallet shows the transaction as sent,
-            contact support with reference <b>{payment.reference}</b>.
-          </span>
-        ),
+        content: debitFailureMessage(error, payment.reference),
         timestamp: new Date(),
       },
     ]);

@@ -41,6 +41,8 @@ export interface EnginePayment {
   network: string;
   status: string;
   expiresAt: string | null;
+  // Issued by our API to the creator; required to cancel the session
+  cancelToken?: string;
 }
 
 interface CreatePaymentInput {
@@ -185,6 +187,14 @@ export async function fulfillRequest(
   );
 
   return response.data.payment;
+}
+
+/** Closes a pending payment session this browser created */
+export async function cancelEnginePayment(
+  reference: string,
+  cancelToken: string,
+): Promise<void> {
+  await api.post("/api/payments/cancel", { reference, cancelToken });
 }
 
 export async function verifyReceiver(input: ClaimGiftInput): Promise<void> {

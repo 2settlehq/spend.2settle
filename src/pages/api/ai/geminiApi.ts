@@ -1378,12 +1378,14 @@ function debitablePayment(payment: {
   depositAddress?: string | null;
   cryptoAmount?: number | null;
   expiresAt?: string | null;
+  cancelToken?: string;
 }) {
   return {
     reference: payment.reference,
     depositAddress: payment.depositAddress ?? null,
     cryptoAmount: payment.cryptoAmount ?? null,
     expiresAt: payment.expiresAt ?? null,
+    cancelToken: payment.cancelToken,
   };
 }
 

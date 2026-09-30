@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -15,8 +15,11 @@ vi.mock("wagmi", () => ({
   useSwitchChain: () => ({ switchChainAsync, isPending: false, variables: undefined }),
   useChains: () => [{ id: 1 }, { id: 56 }],
 }));
+const openConnectModal = vi.fn();
+let connectModalOpen = false;
 vi.mock("@rainbow-me/rainbowkit", () => ({
   ConnectButton: () => <button>rainbowkit-button</button>,
+  useConnectModal: () => ({ openConnectModal, connectModalOpen }),
 }));
 vi.mock("@/helpers/tron/connect_tron_wallet", () => ({
   connectTronWallet: vi.fn(),
@@ -38,7 +41,9 @@ const EVM_ADDRESS = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
 
 describe("ConnectWallet connected state", () => {
   beforeEach(() => {
-    evmAccount = { isConnected: false };
+    evmAccount = { isConnected: false, status: "disconnected" };
+    connectModalOpen = false;
+    openConnectModal.mockReset();
     useWalletStore.getState().clearWallet();
     useBTCWallet.setState({ isConnected: false, paymentAddress: undefined } as any);
     useTronWallet.getState().clearWallet();
@@ -140,5 +145,37 @@ describe("ConnectWallet connected state", () => {
     expect(screen.getByText("12.5 TRX · 40 USDT")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
     expect(useTronWallet.getState().connected).toBe(false);
+  });
+
+  it("shows progress and ignores repeat taps until the wallet list opens", async () => {
+    const { rerender } = render(<ConnectWallet />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Wallet" }));
+
+    const connect = screen.getByRole("button", { name: /Connect Ethereum \/ BNB Wallet/ });
+    fireEvent.click(connect);
+    fireEvent.click(connect);
+    expect(openConnectModal).toHaveBeenCalledTimes(1);
+
+    const opening = screen.getByRole("button", { name: /Opening wallets/ });
+    expect(opening.hasAttribute("disabled")).toBe(true);
+
+    // RainbowKit's list appears: our dialog steps aside
+    connectModalOpen = true;
+    rerender(<ConnectWallet />);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Opening wallets/ })).toBeNull(),
+    );
+  });
+
+  it("shows Connecting… with a Cancel while waiting for wallet approval", () => {
+    evmAccount = { isConnected: false, status: "connecting" };
+
+    render(<ConnectWallet />);
+    const header = screen.getByRole("button", { name: /Connecting/ });
+    fireEvent.click(header);
+
+    expect(screen.getByText(/Waiting for your wallet to approve/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(disconnectEvm).toHaveBeenCalled();
   });
 });

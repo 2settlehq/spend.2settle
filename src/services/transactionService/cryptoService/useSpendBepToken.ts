@@ -16,7 +16,9 @@ export function useSpendNative() {
   async function spendNative(
     recipient: Address,
     amountInEther: string,
-    network: "eth" | "bnb"
+    network: "eth" | "bnb",
+    // Called once the wallet has signed and broadcast (before confirmation)
+    onSubmitted?: (hash: string) => void
   ): Promise<TransactionReceipt | null> {
     // Mainnet, or BSC Testnet (test BNB) when enabled and connected
     const chainKey = resolveChainKey(network, connectedChainId);
@@ -32,6 +34,7 @@ export function useSpendNative() {
         value: parseEther(amountInEther),
         chainId: chain.id,
       });
+      onSubmitted?.(hash);
 
       const receipt = await waitForTransactionReceipt(config, {
         hash,
