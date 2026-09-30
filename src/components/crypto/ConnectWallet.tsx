@@ -12,25 +12,34 @@ import {
 } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
 import ConnectBTCButton from "./ConnectBTCButton";
-import { useBTCWallet } from "stores/btcWalletStore";
-import ConnectTronWallet from "./ConnectTronWallet";
 import useTronWallet from "stores/tronWalletStore";
+import {
+  ConnectedWalletChip,
+  ConnectedWalletPanel,
+  useConnectedWallet,
+} from "./ConnectedWallet";
 import Logo from "../shared/Logo";
 import {
   connectTronWallet,
   listenForTronUnlock,
+  refreshTronWallet,
 } from "@/helpers/tron/connect_tron_wallet";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { probeWalletConnectRelay } from "@/lib/wallets/walletConnectRelay";
 
 const ConnectWallet = () => {
-  const { isConnected } = useAccount();
-  const { isConnected: isBTCConnected } = useBTCWallet();
+  // EVM, BTC or TRON — all shown the same way once connected
+  const wallet = useConnectedWallet();
+  const isConnected = wallet !== null;
   const { connected: isTronConnected } = useTronWallet();
   const [tronPending, setTronPending] = useState(false);
+
+  // Refresh a persisted TronLink connection's address and balances on load
+  useEffect(() => {
+    if (isTronConnected) refreshTronWallet();
+  }, [isTronConnected]);
 
   // Browser-extension wallets (MetaMask etc.) don't need the relay, so warn
   // rather than block when WalletConnect can't be reached.
@@ -64,12 +73,11 @@ const ConnectWallet = () => {
   return (
     <Dialog onOpenChange={warnIfRelayBlocked}>
       <DialogTrigger asChild>
-        {isConnected ? (
-          <ConnectButton />
-        ) : isBTCConnected ? (
-          <ConnectBTCButton />
-        ) : isTronConnected ? (
-          <ConnectTronWallet />
+        {wallet ? (
+          // Our own button for every wallet type, never a wallet's own
+          // popup: those opened underneath this modal dialog, which blocks
+          // taps and scrolling outside itself (Disconnect was unreachable)
+          <ConnectedWalletChip wallet={wallet} />
         ) : (
           <Button
             className="bg-blue-500 hover:bg-blue-400 hover:text-white-4 text-white rounded-full"
@@ -79,7 +87,8 @@ const ConnectWallet = () => {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="w-screen">
+      {/* Fits and scrolls on small phones instead of clipping the bottom */}
+      <DialogContent className="w-[calc(100vw-2rem)] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex justify-center mb-4">
             <Logo />
@@ -94,10 +103,8 @@ const ConnectWallet = () => {
         </DialogHeader>
         <DialogFooter className="flex justify-center w-full">
           <div className="flex justify-center flex-col w-full">
-            {isConnected ? (
-              <DialogClose asChild>
-                <ConnectButton />
-              </DialogClose>
+            {wallet ? (
+              <ConnectedWalletPanel wallet={wallet} />
             ) : (
               <>
                 <DialogClose asChild>

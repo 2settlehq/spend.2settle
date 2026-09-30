@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import { useAccount, useSwitchChain } from "wagmi";
-import { CHAINS } from "@/services/transactionService/cryptoService/chainConfig";
-
-const SWITCH_TARGETS = [CHAINS.eth, CHAINS.bnb];
+import { usePaymentChains } from "@/hooks/wallet/usePaymentChains";
 
 interface WalletAssetNoticeProps {
   walletName: string | null;
@@ -18,6 +16,7 @@ interface WalletAssetNoticeProps {
 export function WalletAssetNotice({ walletName, hasOptions }: WalletAssetNoticeProps) {
   const { chain, chainId } = useAccount();
   const { switchChainAsync, isPending } = useSwitchChain();
+  const paymentChains = usePaymentChains();
   const [error, setError] = useState("");
 
   if (!walletName) return null;
@@ -49,12 +48,12 @@ export function WalletAssetNotice({ walletName, hasOptions }: WalletAssetNoticeP
         your wallet to pay manually.
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {SWITCH_TARGETS.map((target) => (
+        {paymentChains.map((target) => (
           <button
-            key={target.id}
+            key={target.chainId}
             type="button"
             disabled={isPending}
-            onClick={() => switchTo(target.id)}
+            onClick={() => switchTo(target.chainId)}
             className="rounded border border-amber-300 bg-white px-2 py-1 font-medium hover:bg-amber-100 disabled:opacity-60"
           >
             Switch to {target.name}

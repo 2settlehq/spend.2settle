@@ -4,7 +4,7 @@ import { useBTCWallet } from "stores/btcWalletStore";
 import useTronWallet from "stores/tronWalletStore";
 import { useWalletStore } from "./useWalletStore";
 import { WalletAddress } from "@/lib/wallets/types";
-import { resolveWalletName } from "@/lib/wallets/resolveWalletName";
+import { resolveWalletIdentity } from "@/lib/wallets/resolveWalletName";
 
 /**
  * Syncs wallet connection state from all three chains (EVM, BTC, TRON)
@@ -36,13 +36,13 @@ export function useWallet() {
     }
   }, [isEVM, evmAddress, evmChainId, isBTC, paymentAddress, isTron, tronAddress]);
 
-  // Resolve the ENS / .bnb name (or truncated address) once per address
+  // Resolve the ENS / .bnb name + avatar (or truncated address) once per address
   useEffect(() => {
     if (!isConnected || !address || !walletType) return;
     if (useWalletStore.getState().displayName) return;
 
-    resolveWalletName(walletType, address).then((name) =>
-      useWalletStore.getState().setDisplayName(address, name),
+    resolveWalletIdentity(walletType, address).then(({ name, avatar }) =>
+      useWalletStore.getState().setDisplayName(address, name, avatar),
     );
   }, [isConnected, address, walletType]);
 

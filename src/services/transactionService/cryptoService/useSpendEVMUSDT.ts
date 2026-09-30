@@ -6,20 +6,14 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import type { Address, TransactionReceipt } from "viem";
-import {
-  BEP20_ABI,
-  BEP20_CONTRACT,
-  ERC20_ABI,
-  ERC20_CONTRACT,
-} from "@/services/transactionService/cryptoService/cryptoConstants";
+import type { Abi, Address, TransactionReceipt } from "viem";
 import { config } from "../../../wagmi";
 import { useEnsureNetwork } from "./useEnsureNetwork";
-import { CHAINS } from "./chainConfig";
+import { CHAINS, resolveChainKey } from "./chainConfig";
 import { networkType } from "./types";
 
 export function useSpendEVMUSDT() {
-  const { address: caller } = useAccount();
+  const { address: caller, chainId: connectedChainId } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { ensureNetwork } = useEnsureNetwork();
   const [error, setError] = useState<Error | null>(null);
@@ -37,14 +31,17 @@ export function useSpendEVMUSDT() {
     let network: networkType = isERC20 ? "eth" : "bnb";
 
     try {
-      const chain = CHAINS[network];
-      await ensureNetwork(chain.network);
+      // Mainnet, or BSC Testnet (its test USDT) when enabled and connected
+      const chainKey = resolveChainKey(network, connectedChainId);
+      const chain = CHAINS[chainKey];
+      await ensureNetwork(chainKey);
       // Send the transaction (returns tx hash)
       const hash = await writeContractAsync({
-        address: isERC20 ? ERC20_CONTRACT : BEP20_CONTRACT,
-        abi: isERC20 ? ERC20_ABI : BEP20_ABI,
+        address: chain.usdtContract,
+        abi: chain.abi as Abi,
         functionName: "transfer",
         args: [receiver, amount],
+        chainId: chain.id,
       });
 
       // Wait for transaction to be mined

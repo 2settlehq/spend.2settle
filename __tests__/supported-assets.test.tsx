@@ -23,6 +23,7 @@ const switchChainAsync = vi.fn();
 vi.mock("wagmi", () => ({
   useAccount: () => ({ chainId: 8453, chain: { name: "Base" } }),
   useSwitchChain: () => ({ switchChainAsync, isPending: false }),
+  useChains: () => [{ id: 1 }, { id: 56 }, { id: 8453 }],
 }));
 
 const EVM_ADDRESS = "0x1111111111111111111111111111111111111111";
@@ -110,7 +111,7 @@ describe("TransferForm with a connected wallet", () => {
     const assetSelect = screen.getByRole("combobox", { name: "Crypto asset" });
     expect(assetSelect.hasAttribute("disabled")).toBe(true);
 
-    screen.getByRole("button", { name: "Switch to Ethereum Mainnet" }).click();
+    screen.getByRole("button", { name: "Switch to Ethereum" }).click();
     expect(switchChainAsync).toHaveBeenCalledWith({ chainId: 1 });
   });
 });

@@ -1,5 +1,8 @@
 import { useWalletStore } from "@/hooks/wallet/useWalletStore";
-import { CHAINS } from "@/services/transactionService/cryptoService/chainConfig";
+import {
+  CHAINS,
+  TESTNETS_ENABLED,
+} from "@/services/transactionService/cryptoService/chainConfig";
 
 // Chat-side network ids, as stored in usePaymentStore.network (case-insensitive)
 export type PaymentNetwork = "btc" | "eth" | "bnb" | "trx" | "erc20" | "bep20" | "trc20";
@@ -14,19 +17,52 @@ const NETWORK_LABELS: Record<PaymentNetwork, string> = {
   trc20: "USDT (TRC20)",
 };
 
-// Which assets a connected EVM wallet can be debited for, per chain
-const EVM_CHAIN_NETWORKS: Record<number, { name: string; networks: PaymentNetwork[] }> = {
-  [CHAINS.eth.id]: { name: "Ethereum", networks: ["eth", "erc20"] },
-  [CHAINS.bnb.id]: { name: "BNB Smart Chain", networks: ["bnb", "bep20"] },
-};
+export interface PaymentChain {
+  chainId: number;
+  name: string;
+  icon: string;
+  // Assets a wallet on this chain can be debited for
+  networks: PaymentNetwork[];
+}
 
-// The EVM chain a network must be debited on
-export const NETWORK_CHAIN_ID: Partial<Record<PaymentNetwork, number>> = {
-  eth: CHAINS.eth.id,
-  erc20: CHAINS.eth.id,
-  bnb: CHAINS.bnb.id,
-  bep20: CHAINS.bnb.id,
-};
+/**
+ * The EVM chains we take payment on — the single source for which assets a
+ * wallet can pay, the network switcher, and the unsupported-chain notice.
+ * BSC Testnet is included only with NEXT_PUBLIC_ENABLE_TESTNETS=true.
+ */
+export const PAYMENT_CHAINS: PaymentChain[] = [
+  {
+    chainId: CHAINS.eth.id,
+    name: "Ethereum",
+    icon: "/networks/ethereum.svg",
+    networks: ["eth", "erc20"],
+  },
+  {
+    chainId: CHAINS.bnb.id,
+    name: "BNB Smart Chain",
+    icon: "/networks/bnb.svg",
+    networks: ["bnb", "bep20"],
+  },
+  ...(TESTNETS_ENABLED
+    ? [
+        {
+          chainId: CHAINS.bscTestnet.id,
+          name: "BNB Smart Chain Testnet",
+          icon: "/networks/bnb.svg",
+          networks: ["bnb", "bep20"] as PaymentNetwork[],
+        },
+      ]
+    : []),
+];
+
+export function getPaymentChain(chainId?: number | null): PaymentChain | undefined {
+  return PAYMENT_CHAINS.find((chain) => chain.chainId === chainId);
+}
+
+// e.g. "Ethereum or BNB Smart Chain"
+const PAYMENT_CHAIN_NAMES = PAYMENT_CHAINS.map((chain) => chain.name)
+  .join(", ")
+  .replace(/, ([^,]*)$/, " or $1");
 
 /**
  * The payment network for a chat form's asset + network selection.
@@ -74,8 +110,10 @@ export function getConnectedWallet(): ConnectedWallet | null {
     case "TRX":
       return { name: "TRON", networks: ["trx", "trc20"] };
     case "EVM": {
-      const chain = chainId ? EVM_CHAIN_NETWORKS[chainId] : undefined;
-      return chain ?? { name: "an unsupported EVM network", networks: [] };
+      const chain = getPaymentChain(chainId);
+      return chain
+        ? { name: chain.name, networks: chain.networks }
+        : { name: "an unsupported EVM network", networks: [] };
     }
     default:
       return null;
@@ -98,7 +136,7 @@ export function getWalletNetworkError(networks: string[]): string | null {
     .join(" / ");
 
   if (wallet.networks.length === 0) {
-    return `Your wallet is connected to ${wallet.name}. Switch your wallet to Ethereum or BNB Smart Chain, or disconnect it to pay manually.`;
+    return `Your wallet is connected to ${wallet.name}. Switch your wallet to ${PAYMENT_CHAIN_NAMES}, or disconnect it to pay manually.`;
   }
 
   const allowed = wallet.networks.map((n) => NETWORK_LABELS[n]).join(" or ");
