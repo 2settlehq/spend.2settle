@@ -20,6 +20,9 @@ import {
   handleReportFormSubmission,
   handleRequestPaymentFormSubmission,
 } from "@/features/chatbot/handlers/chatHandlers/handle.ai.chat";
+import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
+import { useFormWalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
+import { WalletAssetNotice } from "@/components/chatbot/WalletAssetNotice";
 import {
   getPhoneCountry,
   normalizeInternationalPhoneNumber,
@@ -116,6 +119,30 @@ function CryptoFields({
   onAmountChange,
 }: CryptoFieldsProps) {
   const hasAmount = amount !== undefined && onAmountChange;
+  const { walletName, isAssetSupported, isUsdtNetworkSupported } =
+    useSupportedAssets();
+  // Only offer what the connected wallet can pay with (everything if none)
+  const cryptoOptions = CRYPTO_OPTIONS.filter((option) =>
+    isAssetSupported(option.value),
+  );
+  const usdtNetworks = USDT_NETWORKS.filter(isUsdtNetworkSupported);
+  const singleUsdtNetwork = usdtNetworks.length === 1 ? usdtNetworks[0] : "";
+
+  // Drop a preset (e.g. from the AI) or selection the wallet can't pay with,
+  // and pick the USDT network when only one is possible
+  const supportedKey = `${cryptoOptions.map((c) => c.value)}|${usdtNetworks}`;
+  useEffect(() => {
+    if (crypto && !isAssetSupported(crypto)) {
+      onCryptoChange("", "");
+    } else if (
+      crypto === "USDT" &&
+      (network ? !isUsdtNetworkSupported(network) : singleUsdtNetwork)
+    ) {
+      onNetworkChange(singleUsdtNetwork);
+    }
+    // supportedKey captures every input of the checks above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supportedKey, crypto, network]);
   const amountUnit =
     estimation === "crypto"
       ? crypto || "crypto"
@@ -125,6 +152,10 @@ function CryptoFields({
 
   return (
     <>
+      <WalletAssetNotice
+        walletName={walletName}
+        hasOptions={cryptoOptions.length > 0}
+      />
       <div
         className={`${FIELD_CLASS} ${
           !onEstimationChange && !hasAmount && crypto !== "USDT"
@@ -137,18 +168,19 @@ function CryptoFields({
         </Label>
         <Select
           value={crypto}
+          disabled={cryptoOptions.length === 0}
           onValueChange={(value) =>
             onCryptoChange(
               value,
-              value === "USDT" ? "" : DEFAULT_NETWORKS[value] || "",
+              value === "USDT" ? singleUsdtNetwork : DEFAULT_NETWORKS[value] || "",
             )
           }
         >
           <SelectTrigger id={`${idPrefix}-crypto`} className={INPUT_CLASS}>
-            <SelectValue />
+            <SelectValue placeholder="Select asset" />
           </SelectTrigger>
           <SelectContent>
-            {CRYPTO_OPTIONS.map((option) => (
+            {cryptoOptions.map((option) => (
               <SelectItem key={option.value} value={option.value} className="text-xs">
                 {option.label}
               </SelectItem>
@@ -167,7 +199,7 @@ function CryptoFields({
               <SelectValue placeholder="Select network" />
             </SelectTrigger>
             <SelectContent>
-              {USDT_NETWORKS.map((option) => (
+              {usdtNetworks.map((option) => (
                 <SelectItem key={option} value={option} className="text-xs">
                   {option}
                 </SelectItem>
@@ -412,6 +444,7 @@ export function GiftForm({
   initialValues?: Partial<GiftFormData>;
   formId?: string;
 }) {
+  const getWalletDebit = useFormWalletDebit();
   const phone = splitPhoneNumber(
     initialValues?.phoneNumber ?? "",
     initialValues?.phoneCountry ?? "NG",
@@ -456,7 +489,11 @@ export function GiftForm({
       return;
     }
     setIsSubmitting(true);
-    const success = await handleGiftFormSubmission({ ...form, phoneNumber });
+    // Debit the connected wallet directly when it can pay this asset
+    const success = await handleGiftFormSubmission(
+      { ...form, phoneNumber },
+      getWalletDebit(form.crypto, form.network),
+    );
     setIsSubmitting(false);
     if (success) complete();
   };
@@ -709,6 +746,7 @@ export function FulfillRequestForm({
   initialValues?: Partial<FulfillRequestFormData>;
   formId?: string;
 }) {
+  const getWalletDebit = useFormWalletDebit();
   const phone = splitPhoneNumber(
     initialValues?.phoneNumber ?? "",
     initialValues?.phoneCountry ?? "NG",
@@ -755,11 +793,15 @@ export function FulfillRequestForm({
       return;
     }
     setIsSubmitting(true);
-    const success = await handleFulfillRequestFormSubmission({
-      ...form,
-      requestId: form.requestId.trim().toUpperCase(),
-      phoneNumber,
-    });
+    // Debit the connected wallet directly when it can pay this asset
+    const success = await handleFulfillRequestFormSubmission(
+      {
+        ...form,
+        requestId: form.requestId.trim().toUpperCase(),
+        phoneNumber,
+      },
+      getWalletDebit(form.crypto, form.network),
+    );
     setIsSubmitting(false);
     if (success) complete();
   };

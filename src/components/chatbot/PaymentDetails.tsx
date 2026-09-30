@@ -21,6 +21,8 @@ interface PaymentDetailsProps {
   expiryTime?: Date | string | number;
   walletReference?: string;
   giftPayment?: GiftPaymentTracking;
+  // Paid by direct wallet debit: show live payment status instead of a countdown
+  statusOnly?: boolean;
 }
 
 const FIELD_LABEL_CLASS =
@@ -49,6 +51,7 @@ export default function PaymentDetails({
   expiryTime,
   walletReference,
   giftPayment,
+  statusOnly = false,
 }: PaymentDetailsProps) {
   const giftWallet = items.find((item) => item.isWallet && item.paymentType === "gift" && item.reference);
   const trackedGift = giftPayment ?? (giftWallet?.reference ? {
@@ -93,11 +96,12 @@ export default function PaymentDetails({
         ))}
 
         {expiryTime && (
-          <DetailField label="Payment timer">
+          <DetailField label={statusOnly ? "Payment status" : "Payment timer"}>
             <CountdownTimer
               expiryTime={expiryTime}
               reference={walletReference}
               pollStatus={!trackedGift}
+              statusOnly={statusOnly}
             />
           </DetailField>
         )}

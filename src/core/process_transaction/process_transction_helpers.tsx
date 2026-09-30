@@ -7,6 +7,7 @@ import {
   fulfillRequest,
   getEnginePaymentErrorMessage,
   mapNetwork,
+  type EnginePayment,
 } from "@/services/enginePaymentService";
 import { resetAllTransactionState } from "@/utils/resetTransactionState";
 import { useBankStore } from "stores/bankStore";
@@ -18,7 +19,17 @@ import { useUserStore } from "stores/userStore";
 import { getConfirmedGiftId } from "@/services/gift-flow";
 import type { PaymentLifecycleStatus } from "stores/statusStore";
 
-export async function processTransaction() {
+type ProcessTransactionOptions = {
+  /**
+   * Debits the user's connected wallet for the engine payment and returns the tx hash.
+   * When set, the user is not shown a deposit address to send to manually.
+   */
+  debitWallet?: (payment: EnginePayment) => Promise<string>;
+};
+
+export async function processTransaction({
+  debitWallet,
+}: ProcessTransactionOptions = {}) {
   const currentStep = useChatStore.getState().currentStep;
   const { addMessages, next } = useChatStore.getState();
   const { paymentMode } = usePaymentStore.getState();
@@ -76,7 +87,43 @@ export async function processTransaction() {
     setRequestId,
     setTransactionId,
   } = useTransactionStore.getState();
-  const { setActiveReference, upsertStatus } = useStatusStore.getState();
+  const { setActiveReference, upsertStatus, patchStatus } =
+    useStatusStore.getState();
+
+  // Show the manual deposit details, or debit the connected wallet straight to
+  // the engine's deposit address so the payment is tracked against its reference
+  const completePayment = async (payment: EnginePayment) => {
+    if (!debitWallet) {
+      displaySendPayment();
+      return;
+    }
+
+    try {
+      const txHash = await debitWallet(payment);
+      patchStatus(payment.reference, { txHash });
+      displaySendPayment({ txHash });
+    } catch (error) {
+      console.error("Error debiting connected wallet:", error);
+      const reason =
+        error instanceof Error ? error.message : "The wallet transaction failed";
+      addMessages([
+        {
+          type: "incoming",
+          content: (
+            <span>
+              We could not complete the debit from your wallet: {reason}
+              <br />
+              Say Hi to start again. If your wallet shows the transaction as
+              sent, contact support with reference <b>{payment.reference}</b>.
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+      ]);
+      resetAllTransactionState();
+      next({ stepId: "start", transactionType: undefined });
+    }
+  };
 
   if (isTransfer) {
     try {
@@ -104,7 +151,7 @@ export async function processTransaction() {
         expiresAt: payment.expiresAt,
       });
 
-      displaySendPayment();
+      await completePayment(payment);
     } catch (error) {
       console.error("Error creating transfer:", error);
       displayPaymentError(error);
@@ -136,7 +183,7 @@ export async function processTransaction() {
         expiresAt: payment.expiresAt,
       });
 
-      displaySendPayment();
+      await completePayment(payment);
     } catch (error) {
       console.error("Error creating gift:", error);
       displayPaymentError(error);
@@ -206,7 +253,7 @@ export async function processTransaction() {
         expiresAt: payment.expiresAt,
       });
 
-      displaySendPayment();
+      await completePayment(payment);
     } catch (error) {
       console.error("Error fulfilling request:", error);
       displayPaymentError(error);

@@ -25,7 +25,6 @@ import {
 } from "@/services/enginePaymentService";
 import { engineGet, enginePost } from "@/lib/settle-client";
 import { buildGiftCreationResponse, getConfirmedGiftId, normalizeGiftId } from "@/services/gift-flow";
-import { chat } from "googleapis/build/src/apis/chat";
 import {
   isValidInternationalPhoneNumber,
   normalizeInternationalPhoneNumber,
@@ -239,9 +238,25 @@ const userHistories =
 
 dotenv.config();
 
+// Gemini 3.5 reasons by default (~300-450 hidden tokens, 3-5s before the first
+// visible token, even for "Hi"). These calls are simple extraction/short
+// replies, so minimal effort skips the reasoning and cuts latency to ~1-2s.
+const MINIMAL_REASONING = { reasoning: { effort: "minimal" } };
+
 const model = new ChatOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
   model: "google/gemini-3.5-flash",
+  modelKwargs: MINIMAL_REASONING,
+  configuration: {
+    baseURL: "https://openrouter.ai/api/v1",
+  },
+});
+
+// Greetings need no accuracy, only speed (~1s)
+const greetingModel = new ChatOpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY,
+  model: "google/gemini-3.5-flash-lite",
+  modelKwargs: MINIMAL_REASONING,
   configuration: {
     baseURL: "https://openrouter.ai/api/v1",
   },
@@ -437,7 +452,19 @@ function isGreetingOnly(phrase: string) {
 // completion. Quote-stripping only applies to the first chunk (can't know
 // which chunk is "last" while streaming, so trailing-quote cleanup is
 // dropped — acceptable cosmetic tradeoff for genuine token-level streaming).
-async function* streamGreetingReply(messageText: string): AsyncGenerator<string> {
+// A connected wallet's display name from the client (ENS / .bnb name or a
+// truncated address). It's echoed back verbatim, so keep it short and plain.
+function sanitizeWalletName(value: unknown): string {
+  if (typeof value !== "string" || value.length > 64) return "";
+  const isDomainName = /^[\w-]+(\.[\w-]+)+$/.test(value); // e.g. vitalik.eth, name.bnb
+  const isShortAddress = /^\w{3,}\.\.\.\w{3,}$/.test(value); // e.g. 0x12ab...cd34
+  return isDomainName || isShortAddress ? value : "";
+}
+
+async function* streamGreetingReply(
+  messageText: string,
+  walletName = "",
+): AsyncGenerator<string> {
   const prompt = ChatPromptTemplate.fromMessages([
     [
       "system",
@@ -457,7 +484,7 @@ Keep it under 12 words.`,
 
   try {
     const parser = new StringOutputParser();
-    const stream = await prompt.pipe(model).pipe(parser).stream({
+    const stream = await prompt.pipe(greetingModel).pipe(parser).stream({
       word: messageText,
     });
 
@@ -478,6 +505,10 @@ Keep it under 12 words.`,
 
   if (!sawAnyChunk) {
     yield "How far my chief! Everything dey soft.";
+  }
+
+  if (walletName) {
+    yield ` You're connected as ${walletName}.`;
   }
 
   yield ` ${GREETING_TYPE_QUESTION}`;
@@ -1341,6 +1372,21 @@ async function verifyBankForm(form: BankFormPayload) {
   };
 }
 
+// What the client needs to debit a connected wallet for this payment directly
+function debitablePayment(payment: {
+  reference: string;
+  depositAddress?: string | null;
+  cryptoAmount?: number | null;
+  expiresAt?: string | null;
+}) {
+  return {
+    reference: payment.reference,
+    depositAddress: payment.depositAddress ?? null,
+    cryptoAmount: payment.cryptoAmount ?? null,
+    expiresAt: payment.expiresAt ?? null,
+  };
+}
+
 function paymentCopyableItems(
   payment: {
     depositAddress?: string | null;
@@ -1379,6 +1425,15 @@ export default async function handler(
   if (req.method !== "POST")
     return res.status(405).json({ message: "Only POST allowed" });
 
+  // Server-side duration of every chat request, to tell server latency apart
+  // from browser/network time
+  const startedAt = Date.now();
+  res.on("finish", () => {
+    console.log(
+      `[geminiApi] ${res.statusCode} in ${Date.now() - startedAt}ms`,
+    );
+  });
+
   const {
     messageText,
     chatId,
@@ -1388,6 +1443,7 @@ export default async function handler(
     claimGiftForm,
     fulfillRequestForm,
     reportForm,
+    walletName,
   } = req.body;
   console.log("the message.......", messageText);
   console.log("the chatId.......", chatId);
@@ -1646,6 +1702,7 @@ export default async function handler(
           "request",
           "Request ID",
         ),
+        payment: debitablePayment(payment),
       });
     } catch (error) {
       console.error("Fulfill request from form error:", error);
@@ -1852,6 +1909,7 @@ export default async function handler(
       return res.status(200).json({
         reply,
         copyableItems,
+        payment: debitablePayment(payment),
       });
     } catch (error) {
       console.error("Create transfer from form error:", error);
@@ -1883,7 +1941,10 @@ export default async function handler(
       });
 
       let greetingReply = "";
-      for await (const chunk of streamGreetingReply(messageText)) {
+      for await (const chunk of streamGreetingReply(
+        messageText,
+        sanitizeWalletName(walletName),
+      )) {
         greetingReply += chunk;
         res.write(chunk);
       }

@@ -30,6 +30,8 @@ interface CountdownTimerProps {
   expiryTime: Date | string | number;
   reference?: string;
   pollStatus?: boolean;
+  // Show only the payment status (no countdown), e.g. after a direct wallet debit
+  statusOnly?: boolean;
 }
 
 function toTimeMs(value?: Date | string | number | null): number | undefined {
@@ -44,6 +46,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   expiryTime,
   reference,
   pollStatus = true,
+  statusOnly = false,
 }) => {
   const [timeLeft, setTimeLeft] = useState(0);
   const statusPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -64,10 +67,12 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
       ? new Date(effectiveExpiryTimeMs)
       : undefined;
   const hasWalletExpired = useCallback(() => {
+    // A direct debit is already sent, so keep polling until the engine settles it
+    if (statusOnly) return false;
     return typeof effectiveExpiryTimeMs === "number"
       ? effectiveExpiryTimeMs <= Date.now()
       : false;
-  }, [effectiveExpiryTimeMs]);
+  }, [effectiveExpiryTimeMs, statusOnly]);
   const clearStatusPoll = useCallback(() => {
     if (statusPollIntervalRef.current) {
       clearInterval(statusPollIntervalRef.current);
@@ -87,7 +92,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
 
     setTimeLeft(calculateTimeLeft());
 
-    if (currentStatus !== "pending") {
+    if (statusOnly || currentStatus !== "pending") {
       return;
     }
 
@@ -102,14 +107,18 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [effectiveExpiryTime, currentStatus, setWalletIsExpired]);
+  }, [effectiveExpiryTime, currentStatus, setWalletIsExpired, statusOnly]);
 
   useEffect(() => {
     if (!pollStatus || !reference || hasWalletExpired()) {
       clearStatusPoll();
       return;
     }
-    if (["settled", "failed", "settlement_reversed"].includes(currentStatus)) {
+    if (
+      ["settled", "failed", "expired", "settlement_reversed"].includes(
+        currentStatus,
+      )
+    ) {
       clearStatusPoll();
       return;
     }
@@ -167,6 +176,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   }, [
     reference,
     pollStatus,
+    statusOnly,
     patchStatus,
     currentStatus,
     hasWalletExpired,
@@ -180,7 +190,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   const getDisplayText = () => {
     switch (currentStatus) {
       case "pending":
-        return "countdown";
+        return statusOnly ? "Payment status: Awaiting confirmation" : "countdown";
       case "confirming":
         return "Payment status: Confirming";
       case "confirmed":

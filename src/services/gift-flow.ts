@@ -48,5 +48,12 @@ export function buildGiftCreationResponse(payment: EnginePayment, crypto: string
       giftId: getConfirmedGiftId(payment),
       expiresAt: payment.expiresAt,
     } satisfies GiftPaymentTracking,
+    // Lets the client debit a connected wallet directly
+    payment: {
+      reference: payment.reference,
+      depositAddress: payment.depositAddress,
+      cryptoAmount: payment.cryptoAmount,
+      expiresAt: payment.expiresAt,
+    },
   };
 }

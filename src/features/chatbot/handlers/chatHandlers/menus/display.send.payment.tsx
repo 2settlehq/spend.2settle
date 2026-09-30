@@ -7,13 +7,21 @@ import { usePaymentStore } from "stores/paymentStore";
 import { useTransactionStore } from "stores/transactionStore";
 import { useStatusStore } from "stores/statusStore";
 
-export const displaySendPayment = async () => {
+type DisplaySendPaymentOptions = {
+  // Set when the connected wallet was debited directly, so there is no deposit address to show
+  txHash?: string;
+};
+
+export const displaySendPayment = async ({
+  txHash,
+}: DisplaySendPaymentOptions = {}) => {
   console.log("Displaying send payment message...");
 
   const {
     paymentAssetEstimate,
     paymentNairaEstimate,
     ticker,
+    network,
     activeWallet,
     walletLastAssignedTime,
   } = usePaymentStore.getState();
@@ -24,7 +32,8 @@ export const displaySendPayment = async () => {
 
   const { currentStep, addMessages, next } = useChatStore.getState();
 
-  const { transferId, requestId, transactionId } = useTransactionStore.getState();
+  const { transferId, requestId, transactionId } =
+    useTransactionStore.getState();
 
   const paymentTicker = getBaseSymbol(ticker);
   const assetPayment = parseFloat(paymentAssetEstimate);
@@ -62,8 +71,8 @@ export const displaySendPayment = async () => {
             <br />
             It would be paid into:
             <br />
-            Bank Name: {bank_name} <br/>
-            Account Number: {acct_number} <br/>
+            Bank Name: {bank_name} <br />
+            Account Number: {acct_number} <br />
             Account Name: {receiver_name}
             <br />
             <b>You can copy the requestId below</b> and share with the person to
@@ -100,72 +109,115 @@ export const displaySendPayment = async () => {
       },
     );
   } else {
-    // For transfer, gift, or request payment (needs wallet display)
-    messages.push(
-      {
-        type: "incoming",
-        content: isRequestPayment ? (
-          <span>
-            You are paying{" "}
-            <b>{paymentAsset} = {formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}</b>{" "}
-            to fulfill request <b>{requestId}</b>.
-            <br />
-            Send the crypto to the 2Settle wallet address below to complete the payment.
-          </span>
-        ) : isGift ? (
-          <span>
-            You are sending <b>{paymentAsset}</b> and recipient will be receiving{" "}
-            <b>{formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}</b>.
-          </span>
-        ) : (
-          <span>
-            Note: You are sending{" "}
-            <b>
-              {paymentAsset} ={" "}
-              {formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}
-            </b>{" "}
-            only to 2Settle wallet address to complete your transaction
-          </span>
-        ),
-        timestamp: new Date(),
-      },
-      {
-        type: "incoming",
-        intent: {
-          kind: "component",
-          name: "CopyableText",
-          props: {
-            text: assetPayment.toFixed(8),
-            label: `${paymentTicker} Amount`,
-          },
-          persist: true,
+    if (txHash) {
+      // Connected wallet was debited directly, nothing for the user to send
+      messages.push(
+        {
+          type: "incoming",
+          content: (
+            <span>
+              <b>{paymentAsset}</b> has been debited from your{" "}
+              {network.toUpperCase()} wallet
+              {isRequestPayment ? (
+                <>
+                  {" "}
+                  to fulfill request <b>{requestId}</b>
+                </>
+              ) : null}
+              {isGift ? (
+                <>
+                  . The recipient will receive{" "}
+                  <b>{formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}</b>
+                </>
+              ) : null}
+            </span>
+          ),
+          timestamp: new Date(),
         },
-        timestamp: new Date(),
-      },
-      {
-        type: "incoming",
-        intent: {
-          kind: "component",
-          name: "CopyableText",
-          props: {
-            text: activeWallet,
-            label: "Wallet Address",
-            reference: transactionId,
-            isWallet: true,
-            paymentType: isGift
-              ? "gift"
-              : isRequestPayment
-                ? "payrequest"
-                : isTransfer
-                  ? "transfer"
-                  : undefined,
-            lastAssignedTime: lastAssignedTime,
+        {
+          type: "incoming",
+          intent: {
+            kind: "component",
+            name: "CopyableText",
+            props: { text: txHash, label: "Transaction Hash" },
+            persist: true,
           },
-          persist: true,
+          timestamp: new Date(),
         },
-        timestamp: new Date(),
-      },
-    );
+      );
+    } else {
+      // For transfer, gift, or request payment (needs wallet display)
+      messages.push(
+        {
+          type: "incoming",
+          content: isRequestPayment ? (
+            <span>
+              You are paying{" "}
+              <b>
+                {paymentAsset} ={" "}
+                {formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}
+              </b>{" "}
+              to fulfill request <b>{requestId}</b>.
+              <br />
+              Send the crypto to the 2Settle wallet address below to complete
+              the payment.
+            </span>
+          ) : isGift ? (
+            <span>
+              You are sending <b>{paymentAsset}</b> and recipient will be
+              receiving{" "}
+              <b>{formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}</b>.
+            </span>
+          ) : (
+            <span>
+              Note: You are sending{" "}
+              <b>
+                {paymentAsset} ={" "}
+                {formatCurrency(paymentNairaEstimate, "NGN", "en-NG")}
+              </b>{" "}
+              only to 2Settle wallet address to complete your transaction
+            </span>
+          ),
+          timestamp: new Date(),
+        },
+        {
+          type: "incoming",
+          intent: {
+            kind: "component",
+            name: "CopyableText",
+            props: {
+              text: assetPayment.toFixed(8),
+              label: `${paymentTicker} Amount`,
+            },
+            persist: true,
+          },
+          timestamp: new Date(),
+        },
+        {
+          type: "incoming",
+          intent: {
+            kind: "component",
+            name: "CopyableText",
+            props: {
+              text: activeWallet,
+              label: "Wallet Address",
+              reference: transactionId,
+              isWallet: true,
+              paymentType: isGift
+                ? "gift"
+                : isRequestPayment
+                  ? "payrequest"
+                  : isTransfer
+                    ? "transfer"
+                    : undefined,
+              lastAssignedTime: lastAssignedTime,
+            },
+            persist: true,
+          },
+          timestamp: new Date(),
+        },
+      );
+    }
 
     messages.push({
       type: "incoming",
@@ -204,19 +256,29 @@ export const displaySendPayment = async () => {
       });
     }
 
-    messages.push({
-      type: "incoming",
-      intent: {
-        kind: "component",
-        name: "CountdownTimer",
-        props: { expiryTime: walletExpiryTime, reference: transactionId, pollStatus: !isGift },
-        persist: true,
-      },
-      timestamp: new Date(),
-    });
+    // A direct debit is already paid, so only track settlement (no countdown).
+    // Gifts track their own status in GiftCode.
+    if (!txHash || !isGift) {
+      messages.push({
+        type: "incoming",
+        intent: {
+          kind: "component",
+          name: "CountdownTimer",
+          props: {
+            expiryTime: walletExpiryTime,
+            reference: transactionId,
+            pollStatus: !isGift,
+            statusOnly: !!txHash,
+          },
+          persist: true,
+        },
+        timestamp: new Date(),
+      });
+    }
 
     if (isGift) {
-      const fundingStatus = useStatusStore.getState().statusesByReference[transactionId];
+      const fundingStatus =
+        useStatusStore.getState().statusesByReference[transactionId];
       messages.push({
         type: "incoming",
         intent: {

@@ -8,6 +8,10 @@ import {
   ERC20_CONTRACT,
 } from "./cryptoConstants";
 
+// Dev/staging switch for testnet payments (NEXT_PUBLIC_ENABLE_TESTNETS=true)
+export const TESTNETS_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_TESTNETS === "true";
+
 export const CHAINS = {
   eth: {
     id: 1,
@@ -28,7 +32,7 @@ export const CHAINS = {
     network: "bnb",
   },
   bscTestnet: {
-    id: 59,
+    id: bscTestnet.id, // 97
     name: "Binance Smart Chain Testnet",
     rpcUrl: "https://data-seed-prebsc-1-s1.binance.org:8545/",
     nativeSymbol: "tBNB",
@@ -37,3 +41,24 @@ export const CHAINS = {
     network: "bnb",
   },
 } as const;
+
+export type ChainKey = keyof typeof CHAINS;
+
+/**
+ * Which CHAINS entry to pay on for a network, given the wallet's current chain:
+ * BNB / USDT BEP20 go to BSC Testnet when testnets are enabled and the wallet
+ * is on it, otherwise mainnet.
+ */
+export function resolveChainKey(
+  network: "eth" | "bnb",
+  connectedChainId?: number,
+): ChainKey {
+  if (
+    network === "bnb" &&
+    TESTNETS_ENABLED &&
+    connectedChainId === CHAINS.bscTestnet.id
+  ) {
+    return "bscTestnet";
+  }
+  return network;
+}

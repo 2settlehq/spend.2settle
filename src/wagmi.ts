@@ -6,10 +6,10 @@ import {
   base,
   optimism,
   polygon,
-  sepolia,
   bscTestnet,
   bscGreenfield,
 } from "wagmi/chains";
+import { TESTNETS_ENABLED } from "@/services/transactionService/cryptoService/chainConfig";
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim();
 
@@ -31,10 +31,9 @@ export const config = getDefaultConfig({
     optimism,
     arbitrum,
     base,
-    bscTestnet,
     bscGreenfield,
-
-    // ...(process.env.NEXT_PUBLIC_ENABLE_TESTNETS === "true" ? [sepolia] : []),
+    // Testnets only where NEXT_PUBLIC_ENABLE_TESTNETS=true (dev), never in prod
+    ...(TESTNETS_ENABLED ? [bscTestnet] : []),
   ],
   ssr: true,
 });

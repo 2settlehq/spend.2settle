@@ -14,6 +14,7 @@ import {
   TransferFormData,
   geminiAi,
 } from "@/services/ai/ai-services";
+import type { WalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
 import useChatStore, { MessageType } from "stores/chatStore";
 
 type CopyableReplyItem = {
@@ -194,15 +195,90 @@ const addAiReplyToChat = (reply: GemResponseType) => {
   addMessages(buildAiReplyMessages(reply));
 };
 
+// After a direct debit: what was debited, the tx hash and live settlement
+// status (gifts show their gift ID tracker instead) — no deposit address/timer
+const buildDebitedReplyMessages = (
+  reply: GemResponseType,
+  walletDebit: WalletDebit,
+  txHash: string,
+): MessageType[] => {
+  const payment = reply.payment!;
+  const isGift = Boolean(reply.giftPayment);
+
+  return [
+    {
+      type: "incoming",
+      intent: {
+        kind: "component",
+        name: "PaymentDetails",
+        props: {
+          summary: `${payment.cryptoAmount} ${walletDebit.asset} has been debited from your ${walletDebit.network.toUpperCase()} wallet.`,
+          items: [
+            { label: "Transaction Hash", text: txHash },
+            { label: "Transaction ID", text: payment.reference },
+          ],
+          expiryTime: isGift ? undefined : payment.expiresAt ?? new Date().toISOString(),
+          walletReference: payment.reference,
+          statusOnly: true,
+          giftPayment: reply.giftPayment,
+        },
+        persist: true,
+      },
+      timestamp: new Date(),
+    },
+  ];
+};
+
+/**
+ * Shows the created payment: debits the connected wallet when one can pay it,
+ * otherwise shows the deposit address to pay manually.
+ */
+const completeFormPayment = async (
+  reply: GemResponseType,
+  walletDebit?: WalletDebit,
+) => {
+  const { addMessages } = useChatStore.getState();
+  const payment = reply.payment;
+
+  if (!walletDebit || !payment?.depositAddress || !payment.cryptoAmount) {
+    addAiReplyToChat(reply);
+    return;
+  }
+
+  try {
+    const txHash = await walletDebit.debit(payment);
+    addMessages(buildDebitedReplyMessages(reply, walletDebit, txHash));
+  } catch (error) {
+    console.error("Error debiting connected wallet:", error);
+    const reason =
+      error instanceof Error ? error.message : "The wallet transaction failed";
+    addMessages([
+      {
+        type: "incoming",
+        content: (
+          <span>
+            We could not complete the debit from your wallet: {reason}
+            <br />
+            Please try again. If your wallet shows the transaction as sent,
+            contact support with reference <b>{payment.reference}</b>.
+          </span>
+        ),
+        timestamp: new Date(),
+      },
+    ]);
+  }
+};
+
 export const handleTransferFormSubmission = async (
   formData: TransferFormData,
+  walletDebit?: WalletDebit,
 ) => {
   const { addMessages, setLoading } = useChatStore.getState();
   setLoading(true);
 
   try {
     const reply = await submitTransferForm(formData, getOrCreateSessionId());
-    addAiReplyToChat(reply);
+    await completeFormPayment(reply, walletDebit);
     return true;
   } catch (error: any) {
     const message =
@@ -227,13 +303,14 @@ const submitChatWorkflow = async <T,>(
   formData: T,
   submitter: (form: T, sessionId: string) => Promise<GemResponseType>,
   fallbackMessage: string,
+  walletDebit?: WalletDebit,
 ) => {
   const { addMessages, setLoading } = useChatStore.getState();
   setLoading(true);
 
   try {
     const reply = await submitter(formData, getOrCreateSessionId());
-    addAiReplyToChat(reply);
+    await completeFormPayment(reply, walletDebit);
     return true;
   } catch (error: any) {
     const message =
@@ -254,11 +331,15 @@ const submitChatWorkflow = async <T,>(
   }
 };
 
-export const handleGiftFormSubmission = (formData: GiftFormData) =>
+export const handleGiftFormSubmission = (
+  formData: GiftFormData,
+  walletDebit?: WalletDebit,
+) =>
   submitChatWorkflow(
     formData,
     submitGiftForm,
     "Gift could not be created. Please try again.",
+    walletDebit,
   );
 
 export const handleRequestPaymentFormSubmission = (
@@ -279,11 +360,13 @@ export const handleClaimGiftFormSubmission = (formData: ClaimGiftFormData) =>
 
 export const handleFulfillRequestFormSubmission = (
   formData: FulfillRequestFormData,
+  walletDebit?: WalletDebit,
 ) =>
   submitChatWorkflow(
     formData,
     submitFulfillRequestForm,
     "Payment request could not be fulfilled. Please try again.",
+    walletDebit,
   );
 
 export const handleReportFormSubmission = (formData: ReportFormData) =>

@@ -71,6 +71,19 @@ export function listenForTronUnlock(timeout = 60000): Promise<boolean> {
   });
 }
 
+/**
+ * Re-reads the TronLink address and balances for an already-connected
+ * wallet (e.g. after a page load). No-op when TronLink isn't ready.
+ */
+export function refreshTronWallet() {
+  if (!window.tronWeb?.ready) return;
+  try {
+    finishConnection();
+  } catch (error) {
+    console.error("Failed to refresh Tron wallet:", error);
+  }
+}
+
 function finishConnection() {
   const address = window.tronWeb.defaultAddress.base58;
   if (!address || address === "false") {

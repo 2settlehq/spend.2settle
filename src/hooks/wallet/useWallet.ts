@@ -4,6 +4,7 @@ import { useBTCWallet } from "stores/btcWalletStore";
 import useTronWallet from "stores/tronWalletStore";
 import { useWalletStore } from "./useWalletStore";
 import { WalletAddress } from "@/lib/wallets/types";
+import { resolveWalletIdentity } from "@/lib/wallets/resolveWalletName";
 
 /**
  * Syncs wallet connection state from all three chains (EVM, BTC, TRON)
@@ -13,7 +14,11 @@ import { WalletAddress } from "@/lib/wallets/types";
  * Then read from useWalletStore() anywhere else.
  */
 export function useWallet() {
-  const { isConnected: isEVM, address: evmAddress } = useAccount();
+  const {
+    isConnected: isEVM,
+    address: evmAddress,
+    chainId: evmChainId,
+  } = useAccount();
   const { isConnected: isBTC, paymentAddress } = useBTCWallet();
   const { connected: isTron, walletAddress: tronAddress } = useTronWallet();
   const { setWallet, clearWallet, isConnected, address, walletType } =
@@ -21,7 +26,7 @@ export function useWallet() {
 
   useEffect(() => {
     if (isEVM && evmAddress) {
-      setWallet("EVM", evmAddress as WalletAddress);
+      setWallet("EVM", evmAddress as WalletAddress, evmChainId ?? null);
     } else if (isBTC && paymentAddress) {
       setWallet("BTC", paymentAddress as WalletAddress);
     } else if (isTron && tronAddress) {
@@ -29,7 +34,17 @@ export function useWallet() {
     } else {
       clearWallet();
     }
-  }, [isEVM, evmAddress, isBTC, paymentAddress, isTron, tronAddress]);
+  }, [isEVM, evmAddress, evmChainId, isBTC, paymentAddress, isTron, tronAddress]);
+
+  // Resolve the ENS / .bnb name + avatar (or truncated address) once per address
+  useEffect(() => {
+    if (!isConnected || !address || !walletType) return;
+    if (useWalletStore.getState().displayName) return;
+
+    resolveWalletIdentity(walletType, address).then(({ name, avatar }) =>
+      useWalletStore.getState().setDisplayName(address, name, avatar),
+    );
+  }, [isConnected, address, walletType]);
 
   return { isConnected, address, walletType };
 }
