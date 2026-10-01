@@ -22,6 +22,7 @@ import {
   useConnectedWallet,
 } from "./ConnectedWallet";
 import Logo from "../shared/Logo";
+import { OpenInWalletApp } from "./OpenInWalletApp";
 import {
   connectTronWallet,
   listenForTronUnlock,
@@ -239,6 +240,7 @@ const ConnectWallet = () => {
                     </div>
                   </div>
                 </Button>
+                <OpenInWalletApp />
               </>
             )}
           </div>
