@@ -16,34 +16,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePaymentStore } from "stores/paymentStore";
 
-type RateField = "currentRate" | "merchantRate" | "profitRate";
+type RateField = "rate" | "merchantRate" | "profitRate";
 type RateValues = Record<RateField, string>;
 
 const emptyRates: RateValues = {
-  currentRate: "",
+  rate: "",
   merchantRate: "",
   profitRate: "",
 };
+
+function formatRateValue(value: unknown): string {
+  const numericValue = Number(String(value ?? "").replace(/,/g, ""));
+  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "";
+}
 
 const fields: Array<{
   name: RateField;
   label: string;
   description: string;
+  editable: boolean;
 }> = [
   {
-    name: "currentRate",
+    name: "rate",
     label: "Rate",
-    description: "The current exchange rate in naira.",
+    description: "The current rate displayed on the website.",
+    editable: false,
   },
   {
     name: "merchantRate",
     label: "Merchant rate",
-    description: "The rate used for merchant transactions.",
+    description: "Automatically calculated from the rate and profit.",
+    editable: false,
   },
   {
     name: "profitRate",
     label: "Profit rate",
-    description: "The profit amount included in the transaction rate.",
+    description: "The admin-controlled profit added to the current rate.",
+    editable: true,
   },
 ];
 
@@ -78,9 +87,9 @@ export default function RatesPage() {
           signal: controller.signal,
         }));
         setRates({
-          currentRate: String(data.currentRate),
-          merchantRate: String(data.merchantRate),
-          profitRate: String(data.profitRate),
+          rate: formatRateValue(data.rate ?? data.currentRate),
+          merchantRate: formatRateValue(data.merchantRate),
+          profitRate: formatRateValue(data.profitRate),
         });
       } catch (loadError) {
         if ((loadError as Error).name !== "AbortError") {
@@ -95,8 +104,8 @@ export default function RatesPage() {
     return () => controller.abort();
   }, []);
 
-  const updateField = (field: RateField, value: string) => {
-    setRates((current) => ({ ...current, [field]: value }));
+  const updateProfitRate = (value: string) => {
+    setRates((current) => ({ ...current, profitRate: value }));
     setError(null);
     setSuccess(null);
   };
@@ -106,13 +115,10 @@ export default function RatesPage() {
     setError(null);
     setSuccess(null);
 
-    const hasInvalidRate = Object.values(rates).some((value) => {
-      const number = Number(value);
-      return !Number.isFinite(number) || number <= 0;
-    });
+    const profitRate = Number(rates.profitRate);
 
-    if (hasInvalidRate) {
-      setError("Enter a number greater than zero for all three rates.");
+    if (!Number.isFinite(profitRate) || profitRate < 0) {
+      setError("Enter a profit rate of zero or greater.");
       return;
     }
 
@@ -122,20 +128,20 @@ export default function RatesPage() {
       const data = await readResponse(await fetch("/api/rates/manage", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(rates),
+        body: JSON.stringify({ profitRate: rates.profitRate }),
       }));
 
       const nextRates = {
-        currentRate: String(data.currentRate),
-        merchantRate: String(data.merchantRate),
-        profitRate: String(data.profitRate),
+        rate: formatRateValue(data.rate ?? data.currentRate),
+        merchantRate: formatRateValue(data.merchantRate),
+        profitRate: formatRateValue(data.profitRate),
       };
 
       setRates(nextRates);
-      setRate(nextRates.currentRate);
+      setRate(nextRates.rate);
       setMerchantRate(nextRates.merchantRate);
       setProfitRate(nextRates.profitRate);
-      setSuccess("Rates updated successfully.");
+      setSuccess("Profit rate updated successfully.");
     } catch (saveError) {
       setError(getErrorMessage(saveError));
     } finally {
@@ -147,7 +153,7 @@ export default function RatesPage() {
     <>
       <Head>
         <title>Manage Rates | 2Settle</title>
-        <meta name="description" content="Update 2Settle transaction rates" />
+        <meta name="description" content="Update the 2Settle profit rate" />
       </Head>
       <div className="min-h-screen bg-[#f5f7fc] pb-12">
         <Navbar />
@@ -164,7 +170,7 @@ export default function RatesPage() {
             <CardHeader className="border-b border-[#e5eaf4]">
               <CardTitle className="text-2xl text-gray-900">Manage rates</CardTitle>
               <CardDescription>
-                Update the rate values used by 2Settle transactions.
+                Review transaction rates and update the admin-controlled profit rate.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6">
@@ -187,7 +193,7 @@ export default function RatesPage() {
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="grid gap-5 md:grid-cols-3">
-                    {fields.map(({ name, label, description }) => (
+                    {fields.map(({ name, label, description, editable }) => (
                       <div key={name} className="space-y-2">
                         <Label htmlFor={name}>{label}</Label>
                         <div className="relative">
@@ -196,12 +202,20 @@ export default function RatesPage() {
                             id={name}
                             name={name}
                             type="number"
-                            min="0.01"
+                            min={editable ? "0" : undefined}
                             step="0.01"
                             inputMode="decimal"
                             value={rates[name]}
-                            onChange={(event) => updateField(name, event.target.value)}
-                            className="h-11 pl-8"
+                            onChange={(event) => {
+                              if (editable) updateProfitRate(event.target.value);
+                            }}
+                            readOnly={!editable}
+                            aria-readonly={!editable}
+                            className={`h-11 pl-8 ${
+                              editable
+                                ? "bg-white"
+                                : "cursor-not-allowed bg-gray-100 text-gray-600"
+                            }`}
                             required
                           />
                         </div>
@@ -224,7 +238,7 @@ export default function RatesPage() {
                       ) : (
                         <>
                           <Save className="mr-2 size-4" aria-hidden="true" />
-                          Update rates
+                          Update profit rate
                         </>
                       )}
                     </Button>

@@ -3,6 +3,7 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { BankDetailsInputs } from "@/components/manualTransactionForm/bank-details-inputs";
 import { Button } from "@/components/ui/button";
+import { FormattedAmountInput } from "@/components/ui/formatted-amount-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -241,13 +242,11 @@ function CryptoFields({
           <Label htmlFor={`${idPrefix}-amount`} className={FLOATING_LABEL_CLASS}>
             Amount ({amountUnit})
           </Label>
-          <Input
+          <FormattedAmountInput
             id={`${idPrefix}-amount`}
-            type="number"
-            min="0"
-            step="any"
             value={amount}
-            onChange={(event) => onAmountChange(event.target.value)}
+            onValueChange={onAmountChange}
+            formatAsCurrency={estimation !== "crypto"}
             placeholder="Enter amount"
             className={INPUT_CLASS}
             required
@@ -608,13 +607,10 @@ export function RequestPaymentForm({
         <Label htmlFor="chat-request-amount" className={FLOATING_LABEL_CLASS}>
           Amount (NGN)
         </Label>
-        <Input
+        <FormattedAmountInput
           id="chat-request-amount"
-          type="number"
-          min="0"
-          step="any"
           value={form.amount}
-          onChange={(event) => update({ amount: event.target.value })}
+          onValueChange={(amount) => update({ amount })}
           placeholder="Enter amount"
           className={INPUT_CLASS}
           required

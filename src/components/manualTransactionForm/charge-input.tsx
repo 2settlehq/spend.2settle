@@ -1,7 +1,7 @@
 "use client";
 
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { FormattedAmountInput } from "@/components/ui/formatted-amount-input";
 import { formatCurrency } from "@/helpers/format_currency";
 
 interface ChargeInputProps {
@@ -13,13 +13,12 @@ export function ChargeInput({ value, onChange }: ChargeInputProps) {
   return (
     <div className="space-y-2">
       <Label htmlFor="charge">Charge</Label>
-      <Input
+      <FormattedAmountInput
         id="charge"
         name="charge"
-        type="number"
         placeholder="Enter charge"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onValueChange={onChange}
       />
       {value && (
         <p className="text-sm text-muted-foreground">

@@ -32,7 +32,11 @@ import { useEffect, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { probeWalletConnectRelay } from "@/lib/wallets/walletConnectRelay";
 
-const ConnectWallet = () => {
+interface ConnectWalletProps {
+  onOpenChange?: (open: boolean) => void;
+}
+
+const ConnectWallet = ({ onOpenChange }: ConnectWalletProps = {}) => {
   // EVM, BTC or TRON — all shown the same way once connected
   const wallet = useConnectedWallet();
   const isConnected = wallet !== null;
@@ -117,6 +121,7 @@ const ConnectWallet = () => {
         setOpen(nextOpen);
         if (!nextOpen) setOpeningWallets(false);
         warnIfRelayBlocked(nextOpen);
+        onOpenChange?.(nextOpen);
       }}
     >
       <DialogTrigger asChild>

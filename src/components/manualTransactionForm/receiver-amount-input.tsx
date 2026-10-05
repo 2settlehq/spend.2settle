@@ -1,7 +1,7 @@
 "use client";
 
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { FormattedAmountInput } from "@/components/ui/formatted-amount-input";
 import { formatCurrency } from "@/helpers/format_currency";
 
 interface ReceiverAmountInputProps {
@@ -16,13 +16,12 @@ export function ReceiverAmountInput({
   return (
     <div className="space-y-2">
       <Label htmlFor="receiverAmount">Receiver Amount</Label>
-      <Input
+      <FormattedAmountInput
         id="receiverAmount"
         name="receiverAmount"
-        type="number"
         placeholder="Enter receiver amount"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onValueChange={onChange}
       />
       {value && (
         <p className="text-sm text-muted-foreground">

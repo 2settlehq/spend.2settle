@@ -273,7 +273,7 @@ export default function Body() {
           </h3>
         </div>
 
-        <div className="text-center font-Poppins  text-black bg-gradient-to-tr from-purple-300 via-grey-400 to-white bg-opacity-90 px-8 py-3 rounded-full shadow-lg mb-6 border-2 border-white ">
+        <div className="mb-6 text-center font-Poppins text-black">
           {rateLoading ? (
             <h2 className="font-Poppins text-sm md:text-xl ">
               {/* animate-pulse */}
@@ -285,7 +285,7 @@ export default function Body() {
               {rateError.message}
             </h2>
           ) : (
-            <span className="text-blue-700 font-Poppins text-xl md:text-2xl font-bold animate-pulse">
+            <span className="animate-pulse font-Poppins text-xl font-bold text-blue-700 md:text-2xl">
               <b>
                 {" "}
                 {formatCurrency(rate?.toString() ?? "0", "NGN", "en-NG")}/$1

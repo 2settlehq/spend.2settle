@@ -24,20 +24,24 @@ describe("homepage amount control", () => {
     const onSubmit = vi.fn();
     act(() => root.render(<SendMoney onSubmit={onSubmit} />));
 
-    const currency = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="Amount currency"]',
+    const currency = container.querySelector<HTMLElement>(
+      '[role="combobox"][aria-label="Amount currency"]',
     )!;
     const amount = container.querySelector<HTMLInputElement>(
       'input[aria-label="Amount to spend"]',
     )!;
 
-    fireEvent.change(currency, { target: { value: "dollar" } });
-    fireEvent.change(amount, { target: { value: "125.50" } });
+    expect(currency.textContent).toContain("₦");
+    fireEvent.focus(amount);
+    fireEvent.change(amount, { target: { value: "1250.5" } });
+    expect(amount.value).toBe("1,250.5");
+    fireEvent.blur(amount);
+    expect(amount.value).toBe("1,250.50");
     fireEvent.submit(container.querySelector("form")!);
 
     expect(onSubmit).toHaveBeenCalledWith({
-      amount: "125.50",
-      estimation: "dollar",
+      amount: "1250.50",
+      estimation: "naira",
     });
   });
 

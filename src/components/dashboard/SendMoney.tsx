@@ -1,6 +1,13 @@
 import React, { FormEvent, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormattedAmountInput } from "@/components/ui/formatted-amount-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 
 export type SpendEstimation = "naira" | "dollar" | "crypto";
 
@@ -12,6 +19,16 @@ export interface SpendAmountValues {
 interface SendMoneyProps {
   onSubmit: (values: SpendAmountValues) => void;
 }
+
+const currencyOptions: Array<{
+  value: SpendEstimation;
+  symbol: string;
+  label: string;
+}> = [
+  { value: "naira", symbol: "₦", label: "Naira" },
+  { value: "dollar", symbol: "$", label: "Dollar" },
+  { value: "crypto", symbol: "₿", label: "Crypto" },
+];
 
 const SendMoney = ({ onSubmit }: SendMoneyProps) => {
   const [amount, setAmount] = useState("");
@@ -40,38 +57,54 @@ const SendMoney = ({ onSubmit }: SendMoneyProps) => {
         <label htmlFor="home-spend-currency" className="sr-only">
           Amount currency
         </label>
-        <select
-          id="home-spend-currency"
-          aria-label="Amount currency"
+        <Select
           value={estimation}
-          onChange={(event) => {
-            setEstimation(event.target.value as SpendEstimation);
+          onValueChange={(value) => {
+            setEstimation(value as SpendEstimation);
             setError("");
           }}
-          className="w-20 shrink-0 cursor-pointer border-0 bg-blue-50 px-1.5 text-xs font-semibold text-blue-700 outline-none sm:w-24"
         >
-          <option value="naira">Naira</option>
-          <option value="dollar">Dollar</option>
-          <option value="crypto">Crypto</option>
-        </select>
+          <SelectTrigger
+            id="home-spend-currency"
+            aria-label="Amount currency"
+            className="h-full w-[4.75rem] shrink-0 rounded-l-full rounded-r-none border-0 border-r border-blue-100 bg-blue-50 px-3 text-blue-700 shadow-none focus:ring-0 [&>svg]:h-5 [&>svg]:w-5 [&>svg]:text-blue-600 [&>svg]:opacity-100"
+          >
+            <span className="text-xl font-extrabold leading-none" aria-hidden="true">
+              {currencyOptions.find((option) => option.value === estimation)?.symbol}
+            </span>
+          </SelectTrigger>
+          <SelectContent className="min-w-[10rem] rounded-xl border-blue-100 bg-white p-1 shadow-xl">
+            {currencyOptions.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                className="cursor-pointer rounded-lg py-2.5 text-sm text-gray-700 focus:bg-blue-50 focus:text-blue-700"
+              >
+                <span className="inline-flex items-center gap-3">
+                  <span className="w-6 text-center text-lg font-extrabold text-blue-700">
+                    {option.symbol}
+                  </span>
+                  <span className="font-medium">{option.label}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         <label htmlFor="home-spend-amount" className="sr-only">
           Amount to spend
         </label>
-        <input
+        <FormattedAmountInput
           id="home-spend-amount"
           aria-label="Amount to spend"
-          type="number"
-          min="0"
-          step="any"
-          inputMode="decimal"
           value={amount}
-          onChange={(event) => {
-            setAmount(event.target.value);
+          onValueChange={(value) => {
+            setAmount(value);
             setError("");
           }}
+          formatAsCurrency={estimation !== "crypto"}
           placeholder="Enter amount"
-          className="min-w-0 flex-1 border-0 bg-white px-2 text-sm text-gray-900 outline-none placeholder:text-gray-400"
+          className="h-full min-w-0 flex-1 rounded-none border-0 bg-white px-2 text-sm text-gray-900 shadow-none outline-none placeholder:text-gray-400 focus-visible:ring-0"
         />
 
         <Button

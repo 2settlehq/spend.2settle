@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { BankDetailsInputs } from "@/components/manualTransactionForm/bank-details-inputs";
 import { Button } from "@/components/ui/button";
+import { FormattedAmountInput } from "@/components/ui/formatted-amount-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -350,13 +351,11 @@ export default function TransferForm({
         >
           Amount ({amountUnit})
         </Label>
-        <Input
+        <FormattedAmountInput
           id="chat-transfer-amount"
-          type="number"
-          min="0"
-          step="any"
           value={form.amount}
-          onChange={(event) => update("amount", event.target.value)}
+          onValueChange={(amount) => update("amount", amount)}
+          formatAsCurrency={form.estimation !== "crypto"}
           placeholder="Enter amount"
           className="h-9 px-2.5 !text-base md:!text-xs"
           required
@@ -500,7 +499,7 @@ export default function TransferForm({
           disabled={isSubmitting}
           className="col-span-1 h-9 w-full rounded-lg bg-blue-500 px-2 text-xs text-white hover:bg-blue-500"
         >
-          {isSubmitting ? "Creating..." : "Submit transfer"}
+          {isSubmitting ? "Sending..." : "Send money"}
         </Button>
       </div>
 

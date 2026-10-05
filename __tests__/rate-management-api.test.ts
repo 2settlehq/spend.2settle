@@ -10,19 +10,25 @@ describe("rate management API", () => {
   });
 
   it("loads rates through the signed payment-engine endpoint", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      success: true,
-      currentRate: 1650,
-      merchantRate: 1675,
-      profitRate: 25,
-      updatedAt: "2026-09-22T10:00:00.000Z",
-    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        currentRate: 1650,
+        merchantRate: 1675,
+        profitRate: 25,
+        updatedAt: "2026-09-22T10:00:00.000Z",
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        rate: "1,636.8",
+        rateNumeric: 1636.8,
+      }), { status: 200, headers: { "Content-Type": "application/json" } })));
 
     const { req, res, resData } = mockRequestResponse("GET");
     await handler(req, res);
 
     expect(resData.status).toBe(200);
     expect(resData.json).toEqual(expect.objectContaining({
+      rate: 1636.8,
       currentRate: 1650,
       merchantRate: 1675,
       profitRate: 25,
@@ -36,16 +42,24 @@ describe("rate management API", () => {
         }),
       }),
     );
+    expect(fetch).toHaveBeenCalledWith(
+      "https://engine.example/v1/rate/all",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
-  it("forwards rate updates to the payment engine", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      success: true,
-      currentRate: 1700,
-      merchantRate: 1725,
-      profitRate: 25,
-    }), { status: 200, headers: { "Content-Type": "application/json" } })));
-    const body = { currentRate: "1700", merchantRate: "1725", profitRate: "25" };
+  it("forwards only profit-rate updates to the payment engine", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        success: true,
+        currentRate: 1650,
+        merchantRate: 1680,
+        profitRate: 30,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        rateNumeric: 1636.8,
+      }), { status: 200, headers: { "Content-Type": "application/json" } })));
+    const body = { currentRate: "9999", merchantRate: "9999", profitRate: "30" };
 
     const { req, res, resData } = mockRequestResponse("PUT", body);
     await handler(req, res);
@@ -53,8 +67,12 @@ describe("rate management API", () => {
     expect(resData.status).toBe(200);
     expect(fetch).toHaveBeenCalledWith(
       "https://engine.example/v1/admin/rates",
-      expect.objectContaining({ method: "PUT", body: JSON.stringify(body) }),
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({ profitRate: "30" }),
+      }),
     );
+    expect(resData.json).toEqual(expect.objectContaining({ rate: 1636.8 }));
   });
 
   it("passes payment-engine errors back to the page", async () => {

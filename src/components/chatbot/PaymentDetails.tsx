@@ -1,6 +1,9 @@
 "use client";
 
-import React, { type ReactNode } from "react";
+import React, { type ReactNode, useState } from "react";
+import { Check, Copy } from "lucide-react";
+import ConnectWallet from "@/components/crypto/ConnectWallet";
+import { Button } from "@/components/ui/button";
 import { CopyableText } from "@/features/transact/CopyableText";
 import { CountdownTimer } from "@/helpers/format_date";
 import GiftCode from "./GiftCode";
@@ -53,6 +56,9 @@ export default function PaymentDetails({
   giftPayment,
   statusOnly = false,
 }: PaymentDetailsProps) {
+  const [paymentMethod, setPaymentMethod] = useState<"wallet" | "copy" | null>(null);
+  const [walletCopied, setWalletCopied] = useState(false);
+  const walletItem = items.find((item) => item.isWallet);
   const giftWallet = items.find((item) => item.isWallet && item.paymentType === "gift" && item.reference);
   const trackedGift = giftPayment ?? (giftWallet?.reference ? {
     reference: giftWallet.reference,
@@ -69,6 +75,17 @@ export default function PaymentDetails({
         { label: "Transaction ID", text: trackedGift.reference },
       ]
     : items;
+  const nonWalletItems = visibleItems.filter((item) => !item.isWallet);
+
+  const copyWalletAddress = async () => {
+    if (!walletItem?.text) return;
+
+    setPaymentMethod("copy");
+    await navigator.clipboard.writeText(walletItem.text);
+    setWalletCopied(true);
+    window.setTimeout(() => setWalletCopied(false), 3000);
+  };
+
   return (
     <section
       aria-label="Payment details"
@@ -81,7 +98,78 @@ export default function PaymentDetails({
           </DetailField>
         )}
 
-        {visibleItems.map((item) => (
+        {walletItem && (
+          <DetailField label="Choose payment option">
+            <div className="space-y-2.5">
+              <p className="text-xs text-gray-600">
+                {paymentMethod === "wallet"
+                  ? "Wallet connection selected."
+                  : paymentMethod === "copy"
+                    ? "Deposit wallet address selected."
+                    : "Would you like to connect your wallet or copy the deposit wallet address?"}
+              </p>
+              <div className={paymentMethod ? "flex items-center gap-2" : "grid grid-cols-2 gap-2"}>
+                {paymentMethod !== "copy" && (
+                  <ConnectWallet
+                    onOpenChange={(open) => {
+                      if (open) setPaymentMethod("wallet");
+                    }}
+                  />
+                )}
+                {paymentMethod !== "wallet" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void copyWalletAddress()}
+                    aria-label="Copy deposit wallet address"
+                    className="h-9 rounded-full border-blue-200 px-2 text-xs text-blue-700 hover:bg-blue-50"
+                  >
+                    {walletCopied ? (
+                      <>
+                        <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                        Copy address
+                      </>
+                    )}
+                  </Button>
+                )}
+                {paymentMethod && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setPaymentMethod(null);
+                      setWalletCopied(false);
+                    }}
+                    className="h-8 px-2 text-[11px] text-gray-500"
+                  >
+                    Change method
+                  </Button>
+                )}
+              </div>
+            </div>
+          </DetailField>
+        )}
+
+        {paymentMethod === "copy" && walletItem && (
+          <DetailField label={walletItem.label}>
+            <CopyableText
+              text={walletItem.text}
+              label={walletItem.label}
+              isWallet={walletItem.isWallet}
+              reference={walletItem.reference}
+              paymentType={walletItem.paymentType}
+              lastAssignedTime={walletItem.expiresAt ?? undefined}
+              embedded
+            />
+          </DetailField>
+        )}
+
+        {nonWalletItems.map((item) => (
           <DetailField key={`${item.label}:${item.text}`} label={item.label}>
             <CopyableText
               text={item.text}

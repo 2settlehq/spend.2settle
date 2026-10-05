@@ -16,13 +16,17 @@ export default async function handler(
   }
 
   try {
+    const body = req.method === "PUT"
+      ? JSON.stringify({ profitRate: req.body?.profitRate })
+      : undefined;
+
     const engineResponse = await fetch(`${engineBase}/admin/rates`, {
       method: req.method,
       headers: {
         Authorization: `Bearer ${adminSecret}`,
         "Content-Type": "application/json",
       },
-      body: req.method === "PUT" ? JSON.stringify(req.body) : undefined,
+      body,
       signal: AbortSignal.timeout(15_000),
     });
 
@@ -30,7 +34,30 @@ export default async function handler(
       error: "The payment engine returned an invalid response.",
     }));
 
-    return res.status(engineResponse.status).json(data);
+    if (!engineResponse.ok) {
+      return res.status(engineResponse.status).json(data);
+    }
+
+    // Read the public rate endpoint as well so this page always displays the
+    // exact adjusted rate used on the homepage, even when an older admin API
+    // response does not include `rate` yet.
+    const publicRateResponse = await fetch(`${engineBase}/rate/all`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const publicRateData = await publicRateResponse.json().catch(() => ({}));
+
+    const rate = publicRateResponse.ok
+      ? publicRateData.rateNumeric ?? publicRateData.rate
+      : undefined;
+
+    return res.status(engineResponse.status).json({
+      ...data,
+      rate: rate ?? data.rate ?? data.rateNumeric ?? data.currentRate ?? data.current_rate,
+      merchantRate: data.merchantRate ?? data.merchant_rate,
+      profitRate: data.profitRate ?? data.profit_rate,
+    });
   } catch (error) {
     console.error("Rate management request failed:", error);
     return res.status(502).json({
