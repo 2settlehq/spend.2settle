@@ -27,6 +27,8 @@ type StatusStore = {
   statusesByReference: Record<string, StatusRecord>;
   setActiveReference: (reference: string | null) => void;
   upsertStatus: (record: StatusRecord) => void;
+  // Starts tracking a reference without overwriting what is already known
+  trackStatus: (record: StatusRecord) => void;
   patchStatus: (
     reference: string,
     patch: Partial<Omit<StatusRecord, "reference">>,
@@ -55,10 +57,29 @@ export const useStatusStore = create<StatusStore>()(
           },
         })),
 
+      trackStatus: (record) =>
+        set((state) => {
+          if (state.statusesByReference[record.reference]) return state;
+
+          return {
+            statusesByReference: {
+              ...state.statusesByReference,
+              [record.reference]: {
+                ...record,
+                updatedAt: record.updatedAt ?? new Date().toISOString(),
+              },
+            },
+          };
+        }),
+
       patchStatus: (reference, patch) =>
         set((state) => {
-          const existing = state.statusesByReference[reference];
-          if (!existing) return state;
+          // Create the record when missing so polled updates for payments that
+          // were never seeded with upsertStatus (e.g. AI chat debits) still land
+          const existing: StatusRecord = state.statusesByReference[reference] ?? {
+            reference,
+            status: "pending",
+          };
 
           return {
             statusesByReference: {

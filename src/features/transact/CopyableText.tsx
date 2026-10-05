@@ -12,7 +12,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useChatStore from "stores/chatStore";
 import { useStatusStore } from "stores/statusStore";
 
-const TERMINAL_STATUSES = ["settled", "failed", "settlement_reversed"];
 function toTimeMs(value?: Date | string | number | null): number | undefined {
   if (!value) return undefined;
 
@@ -46,14 +45,10 @@ export const CopyableText: React.FC<{
   const [dialogMessage, setDialogMessage] = useState("");
   const [shouldShowDialog, setShouldShowDialog] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const statusPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
-  const statusPollReferenceRef = useRef<string | null>(null);
   const statusRecord = useStatusStore((state) =>
     reference ? state.statusesByReference[reference] : undefined,
   );
-  const patchStatus = useStatusStore((state) => state.patchStatus);
+  const trackStatus = useStatusStore((state) => state.trackStatus);
   const currentStatus = statusRecord?.status ?? "pending";
   const isCreateGift =
     paymentType?.toLowerCase() === "gift" ||
@@ -71,14 +66,6 @@ export const CopyableText: React.FC<{
       ? effectiveAssignedTimeMs <= Date.now()
       : false;
   }, [effectiveAssignedTimeMs]);
-  const clearStatusPoll = useCallback(() => {
-    if (statusPollIntervalRef.current) {
-      clearInterval(statusPollIntervalRef.current);
-      statusPollIntervalRef.current = null;
-      statusPollReferenceRef.current = null;
-    }
-  }, []);
-
   useEffect(() => {
     if (isWallet && effectiveAssignedTime && currentStatus === "pending") {
       const timer = setInterval(() => {
@@ -152,79 +139,18 @@ export const CopyableText: React.FC<{
     }
   }, [isWallet, currentStatus, hasWalletExpired]);
 
+  // Polling happens app-wide (PaymentStatusBootstrap); this only makes sure
+  // the deposit is tracked so it keeps updating after this message unmounts.
+  // Gifts are tracked by GiftCode.
   useEffect(() => {
-    if (
-      !isWallet ||
-      !reference ||
-      isCreateGift ||
-      hasWalletExpired() ||
-      TERMINAL_STATUSES.includes(currentStatus)
-    ) {
-      clearStatusPoll();
-      return;
-    }
+    if (!isWallet || !reference || isCreateGift) return;
 
-    if (
-      statusPollIntervalRef.current &&
-      statusPollReferenceRef.current === reference
-    ) {
-      return;
-    }
-
-    clearStatusPoll();
-
-    let cancelled = false;
-
-    const fetchStatus = async () => {
-      if (hasWalletExpired()) {
-        cancelled = true;
-        setIsExpired(true);
-        setTimeLeft("00:00");
-        clearStatusPoll();
-        return;
-      }
-
-      try {
-        const res = await fetch(
-          `/api/payments/status?reference=${encodeURIComponent(reference)}`,
-        );
-        if (!res.ok) return;
-
-        const data = await res.json();
-        if (!data?.ok || !data?.payment || cancelled) return;
-
-        patchStatus(reference, {
-          status: data.payment.status,
-          type: data.payment.type,
-          txHash: data.payment.txHash,
-          confirmations: data.payment.confirmations,
-          expiresAt: data.payment.expiresAt,
-        });
-      } catch (error) {
-        console.error("Failed to fetch live payment status:", error);
-      }
-    };
-
-    void fetchStatus();
-
-    statusPollReferenceRef.current = reference;
-    statusPollIntervalRef.current = setInterval(() => {
-      void fetchStatus();
-    }, 10000);
-
-    return () => {
-      cancelled = true;
-      clearStatusPoll();
-    };
-  }, [
-    isWallet,
-    reference,
-    patchStatus,
-    currentStatus,
-    isCreateGift,
-    hasWalletExpired,
-    clearStatusPoll,
-  ]);
+    const expiresAt =
+      typeof effectiveAssignedTimeMs === "number"
+        ? new Date(effectiveAssignedTimeMs).toISOString()
+        : null;
+    trackStatus({ reference, status: "pending", expiresAt });
+  }, [isWallet, reference, isCreateGift, effectiveAssignedTimeMs, trackStatus]);
 
   const getWalletStatusText = () => {
     switch (currentStatus) {
