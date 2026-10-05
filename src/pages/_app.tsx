@@ -14,6 +14,7 @@ import "../../globals.css";
 import { RateBootstrapper } from "@/components/dashboard/RateBootstrapper";
 import UserBootstrap from "@/components/dashboard/checkTelUser";
 import { WalletBootstrap } from "@/components/crypto/WalletBootstrap";
+import { PaymentStatusBootstrap } from "@/components/chatbot/PaymentStatusBootstrap";
 import { Toaster } from "@/components/ui/toaster";
 
 export const client = new QueryClient();
@@ -40,6 +41,7 @@ function MyApp({ Component, pageProps }: AppProps) {
                   <RateBootstrapper />
                   <UserBootstrap />
                   <WalletBootstrap />
+                  <PaymentStatusBootstrap />
                   <Component {...pageProps} />
                   <Toaster />
                   <ReactQueryDevtools />

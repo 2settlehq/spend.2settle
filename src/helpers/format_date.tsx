@@ -22,7 +22,7 @@ export function getFormattedDateTime(date?: Date | string): string {
   return `${time} ${formattedDate}`;
 }
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useConfirmDialogStore } from "stores/useConfirmDialogStore";
 import { useStatusStore } from "stores/statusStore";
 
@@ -49,15 +49,11 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   statusOnly = false,
 }) => {
   const [timeLeft, setTimeLeft] = useState(0);
-  const statusPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
-  const statusPollReferenceRef = useRef<string | null>(null);
   const setWalletIsExpired = useConfirmDialogStore((s) => s.setWalletIsExpired);
   const statusRecord = useStatusStore((state) =>
     reference ? state.statusesByReference[reference] : undefined,
   );
-  const patchStatus = useStatusStore((state) => state.patchStatus);
+  const trackStatus = useStatusStore((state) => state.trackStatus);
   const currentStatus = statusRecord?.status ?? "pending";
   const effectiveExpiryTimeMs = statusRecord?.expiresAt
     ? toTimeMs(statusRecord.expiresAt)
@@ -66,21 +62,6 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     typeof effectiveExpiryTimeMs === "number"
       ? new Date(effectiveExpiryTimeMs)
       : undefined;
-  const hasWalletExpired = useCallback(() => {
-    // A direct debit is already sent, so keep polling until the engine settles it
-    if (statusOnly) return false;
-    return typeof effectiveExpiryTimeMs === "number"
-      ? effectiveExpiryTimeMs <= Date.now()
-      : false;
-  }, [effectiveExpiryTimeMs, statusOnly]);
-  const clearStatusPoll = useCallback(() => {
-    if (statusPollIntervalRef.current) {
-      clearInterval(statusPollIntervalRef.current);
-      statusPollIntervalRef.current = null;
-      statusPollReferenceRef.current = null;
-    }
-  }, []);
-
   useEffect(() => {
     const calculateTimeLeft = () => {
       const difference =
@@ -109,79 +90,17 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     return () => clearInterval(timer);
   }, [effectiveExpiryTime, currentStatus, setWalletIsExpired, statusOnly]);
 
+  // Polling happens app-wide (PaymentStatusBootstrap); this only makes sure
+  // the payment is tracked so it keeps updating after this message unmounts
   useEffect(() => {
-    if (!pollStatus || !reference || hasWalletExpired()) {
-      clearStatusPoll();
-      return;
-    }
-    if (
-      ["settled", "failed", "expired", "settlement_reversed"].includes(
-        currentStatus,
-      )
-    ) {
-      clearStatusPoll();
-      return;
-    }
+    if (!pollStatus || !reference) return;
 
-    if (
-      statusPollIntervalRef.current &&
-      statusPollReferenceRef.current === reference
-    ) {
-      return;
-    }
-
-    clearStatusPoll();
-
-    let cancelled = false;
-
-    const fetchStatus = async () => {
-      if (hasWalletExpired()) {
-        cancelled = true;
-        clearStatusPoll();
-        return;
-      }
-
-      try {
-        const res = await fetch(
-          `/api/payments/status?reference=${encodeURIComponent(reference)}`,
-        );
-        if (!res.ok) return;
-
-        const data = await res.json();
-        if (!data?.ok || !data?.payment || cancelled) return;
-
-        patchStatus(reference, {
-          status: data.payment.status,
-          type: data.payment.type,
-          txHash: data.payment.txHash,
-          confirmations: data.payment.confirmations,
-          expiresAt: data.payment.expiresAt,
-        });
-      } catch (error) {
-        console.error("Failed to fetch live countdown status:", error);
-      }
-    };
-
-    void fetchStatus();
-
-    statusPollReferenceRef.current = reference;
-    statusPollIntervalRef.current = setInterval(() => {
-      void fetchStatus();
-    }, 10000);
-
-    return () => {
-      cancelled = true;
-      clearStatusPoll();
-    };
-  }, [
-    reference,
-    pollStatus,
-    statusOnly,
-    patchStatus,
-    currentStatus,
-    hasWalletExpired,
-    clearStatusPoll,
-  ]);
+    const expiresAt =
+      typeof effectiveExpiryTimeMs === "number"
+        ? new Date(effectiveExpiryTimeMs).toISOString()
+        : null;
+    trackStatus({ reference, status: "pending", expiresAt });
+  }, [reference, pollStatus, effectiveExpiryTimeMs, trackStatus]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
