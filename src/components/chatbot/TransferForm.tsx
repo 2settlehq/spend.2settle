@@ -98,6 +98,30 @@ const getInitialState = (initialValues?: Partial<FormState>): FormState => {
   };
 };
 
+const formatSummaryAmount = (
+  amount: string,
+  estimation: string,
+  crypto: string,
+) => {
+  if (!amount) return "";
+
+  const numericAmount = Number(amount.replace(/,/g, ""));
+  if (!Number.isFinite(numericAmount)) return amount;
+
+  if (estimation === "naira" || estimation === "dollar") {
+    return new Intl.NumberFormat(estimation === "naira" ? "en-NG" : "en-US", {
+      style: "currency",
+      currency: estimation === "naira" ? "NGN" : "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numericAmount);
+  }
+
+  return `${new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 18,
+  }).format(numericAmount)} ${crypto}`;
+};
+
 export default function TransferForm({
   initialValues,
   formId,
@@ -129,13 +153,24 @@ export default function TransferForm({
         : "NGN";
 
   useEffect(() => {
-    if (
-      formId &&
-      window.localStorage.getItem(`completed-transfer-form:${formId}`) ===
-        "true"
-    ) {
-      setSubmitted(true);
+    if (!formId) return;
+
+    const storedSubmission = window.localStorage.getItem(
+      `completed-transfer-form:${formId}`,
+    );
+    if (!storedSubmission) return;
+
+    if (storedSubmission !== "true") {
+      try {
+        setForm(
+          getInitialState(JSON.parse(storedSubmission) as Partial<FormState>),
+        );
+      } catch {
+        // Keep the form's current values for legacy or malformed saved data.
+      }
     }
+
+    setSubmitted(true);
   }, [formId]);
 
   // Drop a preset (e.g. from the AI) or selection the wallet can't pay with,
@@ -218,7 +253,10 @@ export default function TransferForm({
       if (formId) {
         window.localStorage.setItem(
           `completed-transfer-form:${formId}`,
-          "true",
+          JSON.stringify({
+            ...form,
+            phoneNumber: internationalPhoneNumber,
+          }),
         );
       }
       setSubmitted(true);
@@ -226,9 +264,51 @@ export default function TransferForm({
   };
 
   if (submitted) {
+    const transactionSummary = [
+      {
+        label: "Amount",
+        value: formatSummaryAmount(form.amount, form.estimation, form.crypto),
+      },
+      { label: "Crypto", value: form.crypto },
+      { label: "Network", value: form.network },
+      { label: "Recipient", value: form.accountName },
+      { label: "Bank", value: form.bankName },
+      { label: "Account number", value: form.accountNumber },
+      { label: "Phone number", value: internationalPhoneNumber },
+    ].filter(({ value }) => Boolean(value));
+
     return (
-      <div className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs text-gray-700">
-        Transfer details submitted.
+      <div className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs text-gray-700 shadow-sm">
+        <div className="flex items-center gap-2 border-b border-blue-100 pb-2.5">
+          <span
+            aria-hidden="true"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[11px] font-bold text-white"
+          >
+            ✓
+          </span>
+          <div>
+            <p className="font-semibold text-gray-900">
+              Transfer details submitted
+            </p>
+            <p className="mt-0.5 text-[10px] text-gray-500">
+              Transaction summary
+            </p>
+          </div>
+        </div>
+
+        <dl className="mt-2.5 divide-y divide-gray-100">
+          {transactionSummary.map(({ label, value }) => (
+            <div
+              key={label}
+              className="flex items-start justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+            >
+              <dt className="shrink-0 text-[11px] text-gray-500">{label}</dt>
+              <dd className="min-w-0 break-words text-right text-[11px] font-medium text-gray-800">
+                {value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
     );
   }
