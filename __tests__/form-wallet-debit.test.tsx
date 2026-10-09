@@ -67,10 +67,11 @@ describe("transfer form payment with a connected wallet", () => {
   });
 
   it("shows the deposit address and timer when no wallet can pay", async () => {
-    await handleTransferFormSubmission({} as any, undefined);
+    await handleTransferFormSubmission({} as any, undefined, "copy");
 
     const props = lastMessage().intent.props;
     expect(props.items.some((item: any) => item.isWallet)).toBe(true);
     expect(props.statusOnly).toBeUndefined();
+    expect(props.preferredPaymentMethod).toBe("copy");
   });
 });

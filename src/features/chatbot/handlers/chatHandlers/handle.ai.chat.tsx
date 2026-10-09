@@ -146,7 +146,12 @@ const getOrCreateSessionId = () => {
   return sessionId;
 };
 
-const buildAiReplyMessages = (reply: GemResponseType): MessageType[] => {
+type PaymentMethodPreference = "wallet" | "copy";
+
+const buildAiReplyMessages = (
+  reply: GemResponseType,
+  preferredPaymentMethod?: PaymentMethodPreference,
+): MessageType[] => {
   const copyableItems = mergeCopyableItems(
     reply.copyableItems,
     getCopyableReplyItems(reply.reply),
@@ -177,6 +182,7 @@ const buildAiReplyMessages = (reply: GemResponseType): MessageType[] => {
           expiryTime: walletItem ? walletExpiryTime.toISOString() : undefined,
           walletReference: walletItem?.reference,
           giftPayment: reply.giftPayment,
+          preferredPaymentMethod,
         },
         persist: true,
       },
@@ -191,9 +197,12 @@ const buildAiReplyMessages = (reply: GemResponseType): MessageType[] => {
   }];
 };
 
-const addAiReplyToChat = (reply: GemResponseType) => {
+const addAiReplyToChat = (
+  reply: GemResponseType,
+  preferredPaymentMethod?: PaymentMethodPreference,
+) => {
   const { addMessages } = useChatStore.getState();
-  addMessages(buildAiReplyMessages(reply));
+  addMessages(buildAiReplyMessages(reply, preferredPaymentMethod));
 };
 
 // After a direct debit: what was debited, the tx hash and live settlement
@@ -237,12 +246,13 @@ const buildDebitedReplyMessages = (
 const completeFormPayment = async (
   reply: GemResponseType,
   walletDebit?: WalletDebit,
+  preferredPaymentMethod?: PaymentMethodPreference,
 ) => {
   const { addMessages } = useChatStore.getState();
   const payment = reply.payment;
 
   if (!walletDebit || !payment?.depositAddress || !payment.cryptoAmount) {
-    addAiReplyToChat(reply);
+    addAiReplyToChat(reply, preferredPaymentMethod);
     return;
   }
 
@@ -264,13 +274,14 @@ const completeFormPayment = async (
 export const handleTransferFormSubmission = async (
   formData: TransferFormData,
   walletDebit?: WalletDebit,
+  preferredPaymentMethod?: PaymentMethodPreference,
 ) => {
   const { addMessages, setLoading } = useChatStore.getState();
   setLoading(true);
 
   try {
     const reply = await submitTransferForm(formData, getOrCreateSessionId());
-    await completeFormPayment(reply, walletDebit);
+    await completeFormPayment(reply, walletDebit, preferredPaymentMethod);
     return true;
   } catch (error: any) {
     const message =
@@ -296,13 +307,14 @@ const submitChatWorkflow = async <T,>(
   submitter: (form: T, sessionId: string) => Promise<GemResponseType>,
   fallbackMessage: string,
   walletDebit?: WalletDebit,
+  preferredPaymentMethod?: PaymentMethodPreference,
 ) => {
   const { addMessages, setLoading } = useChatStore.getState();
   setLoading(true);
 
   try {
     const reply = await submitter(formData, getOrCreateSessionId());
-    await completeFormPayment(reply, walletDebit);
+    await completeFormPayment(reply, walletDebit, preferredPaymentMethod);
     return true;
   } catch (error: any) {
     const message =
@@ -326,12 +338,14 @@ const submitChatWorkflow = async <T,>(
 export const handleGiftFormSubmission = (
   formData: GiftFormData,
   walletDebit?: WalletDebit,
+  preferredPaymentMethod?: PaymentMethodPreference,
 ) =>
   submitChatWorkflow(
     formData,
     submitGiftForm,
     "Gift could not be created. Please try again.",
     walletDebit,
+    preferredPaymentMethod,
   );
 
 export const handleRequestPaymentFormSubmission = (
@@ -353,12 +367,14 @@ export const handleClaimGiftFormSubmission = (formData: ClaimGiftFormData) =>
 export const handleFulfillRequestFormSubmission = (
   formData: FulfillRequestFormData,
   walletDebit?: WalletDebit,
+  preferredPaymentMethod?: PaymentMethodPreference,
 ) =>
   submitChatWorkflow(
     formData,
     submitFulfillRequestForm,
     "Payment request could not be fulfilled. Please try again.",
     walletDebit,
+    preferredPaymentMethod,
   );
 
 export const handleReportFormSubmission = (formData: ReportFormData) =>

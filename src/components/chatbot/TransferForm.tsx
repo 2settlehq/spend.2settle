@@ -18,6 +18,10 @@ import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
 import { useFormWalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
 import { WalletAssetNotice } from "@/components/chatbot/WalletAssetNotice";
 import {
+  PaymentMethodChoice,
+  type PaymentMethodChoiceValue,
+} from "@/components/chatbot/PaymentMethodChoice";
+import {
   getPhoneCountry,
   normalizeInternationalPhoneNumber,
   PHONE_COUNTRIES,
@@ -132,14 +136,20 @@ export default function TransferForm({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethodChoiceValue | null>(null);
   const { walletName, isAssetSupported, isUsdtNetworkSupported } =
     useSupportedAssets();
   const getWalletDebit = useFormWalletDebit();
-  // Only offer what the connected wallet can pay with (everything if none)
-  const cryptoOptions = CRYPTO_OPTIONS.filter((crypto) =>
-    isAssetSupported(crypto.value),
+  const restrictToConnectedWallet = paymentMethod === "wallet";
+  const cryptoOptions = CRYPTO_OPTIONS.filter(
+    (crypto) =>
+      !restrictToConnectedWallet || isAssetSupported(crypto.value),
   );
-  const usdtNetworks = USDT_NETWORKS.filter(isUsdtNetworkSupported);
+  const usdtNetworks = USDT_NETWORKS.filter(
+    (network) =>
+      !restrictToConnectedWallet || isUsdtNetworkSupported(network),
+  );
   const selectedPhoneCountry = getPhoneCountry(form.phoneCountry);
   const internationalPhoneNumber = normalizeInternationalPhoneNumber(
     form.phoneCountry,
@@ -178,11 +188,19 @@ export default function TransferForm({
   const supportedKey = `${cryptoOptions.map((c) => c.value)}|${usdtNetworks}`;
   useEffect(() => {
     setForm((current) => {
-      if (current.crypto && !isAssetSupported(current.crypto)) {
+      if (
+        restrictToConnectedWallet &&
+        current.crypto &&
+        !isAssetSupported(current.crypto)
+      ) {
         return { ...current, crypto: "", network: "" };
       }
       if (current.crypto !== "USDT") return current;
-      if (current.network && !isUsdtNetworkSupported(current.network)) {
+      if (
+        restrictToConnectedWallet &&
+        current.network &&
+        !isUsdtNetworkSupported(current.network)
+      ) {
         return { ...current, network: usdtNetworks.length === 1 ? usdtNetworks[0] : "" };
       }
       if (!current.network && usdtNetworks.length === 1) {
@@ -192,7 +210,7 @@ export default function TransferForm({
     });
     // supportedKey captures every input of the checks above
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supportedKey, form.crypto, form.network]);
+  }, [supportedKey, form.crypto, form.network, restrictToConnectedWallet]);
 
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -238,14 +256,25 @@ export default function TransferForm({
       return;
     }
 
+    const walletDebit =
+      paymentMethod === "wallet"
+        ? getWalletDebit(form.crypto, form.network)
+        : undefined;
+    if (paymentMethod === "wallet" && !walletDebit) {
+      setError(
+        "Connect a wallet that supports the selected crypto and network.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
-    // Debit the connected wallet directly when it can pay this asset
     const success = await handleTransferFormSubmission(
       {
         ...form,
         phoneNumber: internationalPhoneNumber,
       },
-      getWalletDebit(form.crypto, form.network),
+      walletDebit,
+      paymentMethod ?? undefined,
     );
     setIsSubmitting(false);
 
@@ -313,15 +342,34 @@ export default function TransferForm({
     );
   }
 
+  if (!paymentMethod) {
+    return (
+      <PaymentMethodChoice
+        value={paymentMethod}
+        walletName={walletName}
+        onChange={setPaymentMethod}
+      />
+    );
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
       className="grid w-full grid-cols-2 gap-x-2.5 gap-y-2.5 rounded-xl border border-gray-200 bg-white p-2.5 shadow-sm"
     >
-      <WalletAssetNotice
-        walletName={walletName}
-        hasOptions={cryptoOptions.length > 0}
-      />
+      <div className="col-span-2">
+        <PaymentMethodChoice
+          value={paymentMethod}
+          walletName={walletName}
+          onChange={setPaymentMethod}
+        />
+      </div>
+      {paymentMethod === "wallet" && (
+        <WalletAssetNotice
+          walletName={walletName}
+          hasOptions={cryptoOptions.length > 0}
+        />
+      )}
       <div className="relative min-w-0 pt-2">
         <Label
           htmlFor="chat-transfer-crypto"

@@ -1,5 +1,11 @@
 import React from "react";
-import { cleanup, render, renderHook, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
 import { useWalletStore } from "@/hooks/wallet/useWalletStore";
@@ -18,6 +24,9 @@ vi.mock("@/components/manualTransactionForm/bank-details-inputs", () => ({
 }));
 vi.mock("@/hooks/chatbot/useFormWalletDebit", () => ({
   useFormWalletDebit: () => () => undefined,
+}));
+vi.mock("@/components/crypto/ConnectWallet", () => ({
+  default: () => <button type="button">Connect Wallet</button>,
 }));
 const switchChainAsync = vi.fn();
 vi.mock("wagmi", () => ({
@@ -78,6 +87,7 @@ describe("TransferForm with a connected wallet", () => {
   it("clears an AI preset the wallet can't pay with", () => {
     useWalletStore.getState().setWallet("EVM", EVM_ADDRESS, 1);
     render(<TransferForm initialValues={{ crypto: "USDT", network: "TRC20" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Use Ethereum" }));
 
     expect(
       screen.getByText("Showing assets your connected Ethereum wallet can pay with."),
@@ -90,6 +100,7 @@ describe("TransferForm with a connected wallet", () => {
   it("empties the asset when it isn't payable at all", () => {
     useWalletStore.getState().setWallet("EVM", EVM_ADDRESS, 1);
     render(<TransferForm initialValues={{ crypto: "BTC" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Use Ethereum" }));
 
     expect(screen.getByRole("combobox", { name: "Crypto asset" }).textContent).toContain(
       "Select asset",
@@ -99,6 +110,9 @@ describe("TransferForm with a connected wallet", () => {
   it("keeps the preset and shows no hint with no wallet", () => {
     render(<TransferForm initialValues={{ crypto: "BTC" }} />);
 
+    expect(screen.queryByRole("combobox", { name: "Crypto asset" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Wallet address" }));
+
     expect(screen.getByRole("combobox", { name: "Crypto asset" }).textContent).toContain("BTC");
     expect(screen.queryByText(/Showing assets your connected/)).toBeNull();
   });
@@ -106,6 +120,9 @@ describe("TransferForm with a connected wallet", () => {
   it("explains an unsupported chain and offers to switch instead of an empty list", () => {
     useWalletStore.getState().setWallet("EVM", EVM_ADDRESS, 8453);
     render(<TransferForm initialValues={{ crypto: "ETH" }} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use an unsupported EVM network" }),
+    );
 
     expect(screen.getByText("Base")).toBeTruthy();
     const assetSelect = screen.getByRole("combobox", { name: "Crypto asset" });

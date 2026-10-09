@@ -25,6 +25,10 @@ import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
 import { useFormWalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
 import { WalletAssetNotice } from "@/components/chatbot/WalletAssetNotice";
 import {
+  PaymentMethodChoice,
+  type PaymentMethodChoiceValue,
+} from "@/components/chatbot/PaymentMethodChoice";
+import {
   getPhoneCountry,
   normalizeInternationalPhoneNumber,
   PHONE_COUNTRIES,
@@ -106,6 +110,7 @@ interface CryptoFieldsProps {
   onNetworkChange: (network: string) => void;
   onEstimationChange?: (estimation: string) => void;
   onAmountChange?: (amount: string) => void;
+  restrictToConnectedWallet?: boolean;
 }
 
 function CryptoFields({
@@ -118,24 +123,33 @@ function CryptoFields({
   onNetworkChange,
   onEstimationChange,
   onAmountChange,
+  restrictToConnectedWallet = true,
 }: CryptoFieldsProps) {
   const hasAmount = amount !== undefined && onAmountChange;
   const { walletName, isAssetSupported, isUsdtNetworkSupported } =
     useSupportedAssets();
-  // Only offer what the connected wallet can pay with (everything if none)
-  const cryptoOptions = CRYPTO_OPTIONS.filter((option) =>
-    isAssetSupported(option.value),
+  const cryptoOptions = CRYPTO_OPTIONS.filter(
+    (option) =>
+      !restrictToConnectedWallet || isAssetSupported(option.value),
   );
-  const usdtNetworks = USDT_NETWORKS.filter(isUsdtNetworkSupported);
+  const usdtNetworks = USDT_NETWORKS.filter(
+    (network) =>
+      !restrictToConnectedWallet || isUsdtNetworkSupported(network),
+  );
   const singleUsdtNetwork = usdtNetworks.length === 1 ? usdtNetworks[0] : "";
 
   // Drop a preset (e.g. from the AI) or selection the wallet can't pay with,
   // and pick the USDT network when only one is possible
   const supportedKey = `${cryptoOptions.map((c) => c.value)}|${usdtNetworks}`;
   useEffect(() => {
-    if (crypto && !isAssetSupported(crypto)) {
+    if (
+      restrictToConnectedWallet &&
+      crypto &&
+      !isAssetSupported(crypto)
+    ) {
       onCryptoChange("", "");
     } else if (
+      restrictToConnectedWallet &&
       crypto === "USDT" &&
       (network ? !isUsdtNetworkSupported(network) : singleUsdtNetwork)
     ) {
@@ -143,7 +157,7 @@ function CryptoFields({
     }
     // supportedKey captures every input of the checks above
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supportedKey, crypto, network]);
+  }, [supportedKey, crypto, network, restrictToConnectedWallet]);
   const amountUnit =
     estimation === "crypto"
       ? crypto || "crypto"
@@ -153,10 +167,12 @@ function CryptoFields({
 
   return (
     <>
-      <WalletAssetNotice
-        walletName={walletName}
-        hasOptions={cryptoOptions.length > 0}
-      />
+      {restrictToConnectedWallet && (
+        <WalletAssetNotice
+          walletName={walletName}
+          hasOptions={cryptoOptions.length > 0}
+        />
+      )}
       <div
         className={`${FIELD_CLASS} ${
           !onEstimationChange && !hasAmount && crypto !== "USDT"
@@ -444,6 +460,7 @@ export function GiftForm({
   formId?: string;
 }) {
   const getWalletDebit = useFormWalletDebit();
+  const { walletName } = useSupportedAssets();
   const phone = splitPhoneNumber(
     initialValues?.phoneNumber ?? "",
     initialValues?.phoneCountry ?? "NG",
@@ -462,6 +479,8 @@ export function GiftForm({
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethodChoiceValue | null>(null);
   const { submitted, complete } = useSubmittedState(
     formId,
     "completed-gift-form",
@@ -487,11 +506,22 @@ export function GiftForm({
       setError("Please complete every field with valid details.");
       return;
     }
+    const walletDebit =
+      paymentMethod === "wallet"
+        ? getWalletDebit(form.crypto, form.network)
+        : undefined;
+    if (paymentMethod === "wallet" && !walletDebit) {
+      setError(
+        "Connect a wallet that supports the selected crypto and network.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
-    // Debit the connected wallet directly when it can pay this asset
     const success = await handleGiftFormSubmission(
       { ...form, phoneNumber },
-      getWalletDebit(form.crypto, form.network),
+      walletDebit,
+      paymentMethod ?? undefined,
     );
     setIsSubmitting(false);
     if (success) complete();
@@ -501,8 +531,25 @@ export function GiftForm({
     return <SubmittedNotice>Gift details submitted.</SubmittedNotice>;
   }
 
+  if (!paymentMethod) {
+    return (
+      <PaymentMethodChoice
+        value={paymentMethod}
+        walletName={walletName}
+        onChange={setPaymentMethod}
+      />
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className={FORM_CLASS}>
+      <div className="col-span-2">
+        <PaymentMethodChoice
+          value={paymentMethod}
+          walletName={walletName}
+          onChange={setPaymentMethod}
+        />
+      </div>
       <CryptoFields
         idPrefix="chat-gift"
         crypto={form.crypto}
@@ -515,6 +562,7 @@ export function GiftForm({
         onNetworkChange={(network) => update({ network })}
         onEstimationChange={(estimation) => update({ estimation })}
         onAmountChange={(amount) => update({ amount })}
+        restrictToConnectedWallet={paymentMethod === "wallet"}
       />
       <div className="col-span-2 grid grid-cols-3 items-end gap-2.5">
         <PhoneField
@@ -743,6 +791,7 @@ export function FulfillRequestForm({
   formId?: string;
 }) {
   const getWalletDebit = useFormWalletDebit();
+  const { walletName } = useSupportedAssets();
   const phone = splitPhoneNumber(
     initialValues?.phoneNumber ?? "",
     initialValues?.phoneCountry ?? "NG",
@@ -760,6 +809,8 @@ export function FulfillRequestForm({
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] =
+    useState<PaymentMethodChoiceValue | null>(null);
   const { submitted, complete } = useSubmittedState(
     formId,
     "completed-fulfill-request-form",
@@ -788,15 +839,26 @@ export function FulfillRequestForm({
       );
       return;
     }
+    const walletDebit =
+      paymentMethod === "wallet"
+        ? getWalletDebit(form.crypto, form.network)
+        : undefined;
+    if (paymentMethod === "wallet" && !walletDebit) {
+      setError(
+        "Connect a wallet that supports the selected crypto and network.",
+      );
+      return;
+    }
+
     setIsSubmitting(true);
-    // Debit the connected wallet directly when it can pay this asset
     const success = await handleFulfillRequestFormSubmission(
       {
         ...form,
         requestId: form.requestId.trim().toUpperCase(),
         phoneNumber,
       },
-      getWalletDebit(form.crypto, form.network),
+      walletDebit,
+      paymentMethod ?? undefined,
     );
     setIsSubmitting(false);
     if (success) complete();
@@ -806,8 +868,25 @@ export function FulfillRequestForm({
     return <SubmittedNotice>Payment request details submitted.</SubmittedNotice>;
   }
 
+  if (!paymentMethod) {
+    return (
+      <PaymentMethodChoice
+        value={paymentMethod}
+        walletName={walletName}
+        onChange={setPaymentMethod}
+      />
+    );
+  }
+
   return (
     <form onSubmit={handleSubmit} className={FORM_CLASS}>
+      <div className="col-span-2">
+        <PaymentMethodChoice
+          value={paymentMethod}
+          walletName={walletName}
+          onChange={setPaymentMethod}
+        />
+      </div>
       <div className={`${FIELD_CLASS} col-span-2`}>
         <Label htmlFor="chat-fulfill-request-id" className={FLOATING_LABEL_CLASS}>
           Request ID
@@ -831,6 +910,7 @@ export function FulfillRequestForm({
           update({ crypto: nextCrypto, network })
         }
         onNetworkChange={(network) => update({ network })}
+        restrictToConnectedWallet={paymentMethod === "wallet"}
       />
       <div className="col-span-2 grid grid-cols-3 items-end gap-2.5">
         <PhoneField

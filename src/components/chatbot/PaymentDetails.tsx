@@ -26,6 +26,7 @@ interface PaymentDetailsProps {
   giftPayment?: GiftPaymentTracking;
   // Paid by direct wallet debit: show live payment status instead of a countdown
   statusOnly?: boolean;
+  preferredPaymentMethod?: "wallet" | "copy";
 }
 
 const FIELD_LABEL_CLASS =
@@ -55,8 +56,11 @@ export default function PaymentDetails({
   walletReference,
   giftPayment,
   statusOnly = false,
+  preferredPaymentMethod,
 }: PaymentDetailsProps) {
-  const [paymentMethod, setPaymentMethod] = useState<"wallet" | "copy" | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"wallet" | "copy" | null>(
+    preferredPaymentMethod ?? null,
+  );
   const [walletCopied, setWalletCopied] = useState(false);
   const walletItem = items.find((item) => item.isWallet);
   const giftWallet = items.find((item) => item.isWallet && item.paymentType === "gift" && item.reference);
@@ -98,7 +102,7 @@ export default function PaymentDetails({
           </DetailField>
         )}
 
-        {walletItem && (
+        {walletItem && !preferredPaymentMethod && (
           <DetailField label="Choose payment option">
             <div className="space-y-2.5">
               <p className="text-xs text-gray-600">

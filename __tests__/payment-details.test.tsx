@@ -47,6 +47,17 @@ describe("payment details compatibility", () => {
     expect(screen.queryByRole("button", { name: "Copy deposit wallet address" })).toBeNull();
     expect(screen.queryByText("deposit-wallet")).toBeNull();
   });
+  it("uses an earlier wallet-address choice without asking again", () => {
+    render(<PaymentDetails
+      preferredPaymentMethod="copy"
+      items={[
+        { label: "Wallet Address", text: "deposit-wallet", isWallet: true },
+      ]}
+    />);
+
+    expect(screen.queryByText(/connect your wallet or copy/i)).toBeNull();
+    expect(screen.getByText("deposit-wallet")).toBeTruthy();
+  });
   it.each(["transfer", "request"])("preserves %s IDs and ordinary payment polling", (paymentType) => {
     render(<PaymentDetails items={[
       { label: "Wallet Address", text: "deposit-wallet", isWallet: true, paymentType, reference: "2S-ORIGIN" },

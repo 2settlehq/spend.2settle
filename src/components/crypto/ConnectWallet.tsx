@@ -28,18 +28,23 @@ import {
   listenForTronUnlock,
   refreshTronWallet,
 } from "@/helpers/tron/connect_tron_wallet";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@/hooks/use-toast";
 import { probeWalletConnectRelay } from "@/lib/wallets/walletConnectRelay";
 
 interface ConnectWalletProps {
   onOpenChange?: (open: boolean) => void;
+  onConnected?: () => void;
 }
 
-const ConnectWallet = ({ onOpenChange }: ConnectWalletProps = {}) => {
+const ConnectWallet = ({
+  onOpenChange,
+  onConnected,
+}: ConnectWalletProps = {}) => {
   // EVM, BTC or TRON — all shown the same way once connected
   const wallet = useConnectedWallet();
   const isConnected = wallet !== null;
+  const wasConnected = useRef(isConnected);
   const { connected: isTronConnected } = useTronWallet();
   const [tronPending, setTronPending] = useState(false);
 
@@ -53,6 +58,13 @@ const ConnectWallet = ({ onOpenChange }: ConnectWalletProps = {}) => {
   const [openError, setOpenError] = useState("");
   // A wallet was picked and we're waiting for it to approve (e.g. in its app)
   const evmConnecting = !isConnected && evmStatus === "connecting";
+
+  useEffect(() => {
+    if (!wasConnected.current && isConnected) {
+      onConnected?.();
+    }
+    wasConnected.current = isConnected;
+  }, [isConnected, onConnected]);
 
   // RainbowKit's list is up: hand over to it (two open modals block each other)
   useEffect(() => {
