@@ -195,6 +195,8 @@ const buildAiReplyMessages = (
           items: copyableItems,
           expiryTime: walletItem ? walletExpiryTime.toISOString() : undefined,
           walletReference: walletItem?.reference,
+          paymentReference: reply.payment?.reference ?? walletItem?.reference,
+          cancelToken: reply.payment?.cancelToken,
           giftPayment: reply.giftPayment,
           preferredPaymentMethod,
         },

@@ -1,7 +1,12 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PaymentDetails from "@/components/chatbot/PaymentDetails";
+import { useStatusStore } from "stores/statusStore";
+
+const { cancelEnginePayment } = vi.hoisted(() => ({
+  cancelEnginePayment: vi.fn(),
+}));
 
 vi.mock("@/features/transact/CopyableText", () => ({ CopyableText: ({ text, label }: { text: string; label: string }) => <button aria-label={`Copy ${label}`}>{text}</button> }));
 vi.mock("@/components/crypto/ConnectWallet", () => ({
@@ -11,6 +16,11 @@ vi.mock("@/components/crypto/ConnectWallet", () => ({
 }));
 vi.mock("@/helpers/format_date", () => ({ CountdownTimer: ({ reference, pollStatus }: any) => <div data-testid="timer" data-reference={reference} data-poll={String(pollStatus)} /> }));
 vi.mock("@/components/chatbot/GiftCode", () => ({ default: ({ payment }: any) => <div data-testid="gift-tracking" data-reference={payment.reference} /> }));
+vi.mock("@/services/enginePaymentService", () => ({ cancelEnginePayment }));
+beforeEach(() => {
+  cancelEnginePayment.mockReset();
+  useStatusStore.getState().clearAllStatuses();
+});
 afterEach(cleanup);
 
 describe("payment details compatibility", () => {
@@ -66,5 +76,60 @@ describe("payment details compatibility", () => {
     expect(screen.getByText("2S-ORIGIN")).toBeTruthy();
     expect(screen.getByTestId("timer").dataset.poll).toBe("true");
     expect(screen.queryByTestId("gift-tracking")).toBeNull();
+  });
+  it("cancels a pending transaction after confirmation", async () => {
+    cancelEnginePayment.mockResolvedValue(undefined);
+    render(<PaymentDetails
+      items={[
+        { label: "Wallet Address", text: "deposit-wallet", isWallet: true, paymentType: "transfer", reference: "2S-CANCEL" },
+      ]}
+      expiryTime="2026-10-09T13:00:00Z"
+      walletReference="2S-CANCEL"
+      paymentReference="2S-CANCEL"
+      cancelToken="cancel-token"
+      preferredPaymentMethod="copy"
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel transaction" }));
+    expect(screen.getByRole("alertdialog", { name: "Confirm transaction cancellation" })).toBeTruthy();
+    expect(cancelEnginePayment).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Yes, cancel transaction" }));
+
+    await waitFor(() => {
+      expect(cancelEnginePayment).toHaveBeenCalledWith("2S-CANCEL", "cancel-token");
+      expect(screen.getByText(/Transaction cancelled/i)).toBeTruthy();
+    });
+    expect(useStatusStore.getState().statusesByReference["2S-CANCEL"]?.status).toBe("expired");
+    expect(screen.queryByTestId("timer")).toBeNull();
+  });
+  it("keeps the transaction available when cancellation fails", async () => {
+    cancelEnginePayment.mockRejectedValue(new Error("already processing"));
+    render(<PaymentDetails
+      paymentReference="2S-ACTIVE"
+      cancelToken="cancel-token"
+    />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel transaction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, cancel transaction" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "This transaction could not be cancelled. It may already be processing.",
+    );
+    expect(useStatusStore.getState().statusesByReference["2S-ACTIVE"]).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Yes, cancel transaction" })).toBeTruthy();
+  });
+  it("hides cancellation once payment processing has started", () => {
+    useStatusStore.getState().upsertStatus({
+      reference: "2S-CONFIRMING",
+      status: "confirming",
+    });
+
+    render(<PaymentDetails
+      paymentReference="2S-CONFIRMING"
+      cancelToken="cancel-token"
+    />);
+
+    expect(screen.queryByRole("button", { name: "Cancel transaction" })).toBeNull();
   });
 });

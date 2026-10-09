@@ -26,6 +26,7 @@ const REPLY = {
     depositAddress: "0xdb28deposit7520",
     cryptoAmount: 0.02045,
     expiresAt: "2026-09-30T12:00:00.000Z",
+    cancelToken: "cancel-token",
   },
 };
 
@@ -85,5 +86,7 @@ describe("transfer form payment with a connected wallet", () => {
     ]);
     expect(props.statusOnly).toBeUndefined();
     expect(props.preferredPaymentMethod).toBe("copy");
+    expect(props.paymentReference).toBe("2S-7WSKCG");
+    expect(props.cancelToken).toBe("cancel-token");
   });
 });
