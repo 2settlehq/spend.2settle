@@ -36,6 +36,10 @@ export function buildGiftCreationResponse(payment: EnginePayment, crypto: string
         expiresAt: payment.expiresAt,
       }] : []),
       {
+        label: `Crypto Amount (${crypto})`,
+        text: String(payment.cryptoAmount),
+      },
+      {
         label: "Transaction ID",
         text: payment.reference,
         reference: payment.reference,

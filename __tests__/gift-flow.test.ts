@@ -20,9 +20,10 @@ describe("deferred gift IDs", () => {
     const payment: EnginePayment = { reference: "GP-HKVT5E", type: "gift", crypto: "BTC", network: "bitcoin", status: "pending", giftId: null, depositAddress: "wallet-address", cryptoAmount: 0.001, fiatAmount: 50000, expiresAt: "2026-09-14T12:00:00Z" };
     const result = buildGiftCreationResponse(payment, "BTC");
     expect(result.reply).not.toContain(payment.reference);
-    expect(result.copyableItems).toHaveLength(2);
+    expect(result.copyableItems).toHaveLength(3);
     expect(result.copyableItems[0]).toMatchObject({ label: "Wallet Address", text: "wallet-address", reference: payment.reference, paymentType: "gift" });
-    expect(result.copyableItems[1]).toMatchObject({ label: "Transaction ID", text: payment.reference });
+    expect(result.copyableItems[1]).toMatchObject({ label: "Crypto Amount (BTC)", text: "0.001" });
+    expect(result.copyableItems[2]).toMatchObject({ label: "Transaction ID", text: payment.reference });
     expect(result.copyableItems.some((item) => item.label === "Gift ID")).toBe(false);
     expect(result.giftPayment).toMatchObject({ reference: payment.reference, giftId: null });
     expect(buildGiftCreationResponse({ ...payment, status: "confirming", giftId: "2S-HKVT5E" }, "BTC").giftPayment.giftId).toBeNull();

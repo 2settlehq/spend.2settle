@@ -18,6 +18,7 @@ const REPLY = {
   reply: "You are sending 0.02045 BNB and you will be receiving ₦20000.",
   copyableItems: [
     { label: "Wallet Address", text: "0xdb28deposit7520", isWallet: true, reference: "2S-7WSKCG", paymentType: "transfer", expiresAt: "2026-09-30T12:00:00.000Z" },
+    { label: "Crypto Amount (BNB)", text: "0.02045", reference: "2S-7WSKCG", paymentType: "transfer" },
     { label: "Transaction ID", text: "2S-7WSKCG", reference: "2S-7WSKCG", paymentType: "transfer" },
   ],
   payment: {
@@ -46,6 +47,7 @@ describe("transfer form payment with a connected wallet", () => {
     const props = lastMessage().intent.props;
     expect(props.summary).toBe("0.02045 BNB has been debited from your BNB wallet.");
     expect(props.items).toEqual([
+      { label: "Crypto Amount (BNB)", text: "0.02045" },
       { label: "Transaction Hash", text: "0xtxhash" },
       { label: "Transaction ID", text: "2S-7WSKCG" },
     ]);
@@ -71,6 +73,16 @@ describe("transfer form payment with a connected wallet", () => {
 
     const props = lastMessage().intent.props;
     expect(props.items.some((item: any) => item.isWallet)).toBe(true);
+    expect(
+      props.items.filter((item: any) =>
+        item.label.toLowerCase().startsWith("crypto amount"),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        label: "Crypto Amount (BNB)",
+        text: "0.02045",
+      }),
+    ]);
     expect(props.statusOnly).toBeUndefined();
     expect(props.preferredPaymentMethod).toBe("copy");
   });

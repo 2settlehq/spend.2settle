@@ -1394,9 +1394,11 @@ function paymentCopyableItems(
     depositAddress?: string | null;
     reference: string;
     expiresAt?: string | null;
+    cryptoAmount?: number | null;
   },
   paymentType: string,
   idLabel: string,
+  crypto?: string,
 ) {
   return [
     ...(payment.depositAddress
@@ -1408,6 +1410,16 @@ function paymentCopyableItems(
             reference: payment.reference,
             paymentType,
             expiresAt: payment.expiresAt,
+          },
+        ]
+      : []),
+    ...(payment.cryptoAmount != null && crypto
+      ? [
+          {
+            label: `Crypto Amount (${crypto})`,
+            text: String(payment.cryptoAmount),
+            reference: payment.reference,
+            paymentType,
           },
         ]
       : []),
@@ -1703,6 +1715,7 @@ export default async function handler(
           payment,
           "request",
           "Request ID",
+          cryptoFields.crypto,
         ),
         payment: debitablePayment(payment),
       });
@@ -1897,6 +1910,12 @@ export default async function handler(
               },
             ]
           : []),
+        {
+          label: `Crypto Amount (${updatedSession.crypto})`,
+          text: String(payment.cryptoAmount),
+          reference: payment.reference,
+          paymentType: "transfer",
+        },
         {
           label: "Transaction ID",
           text: payment.reference,

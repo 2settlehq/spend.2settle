@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Check, Copy } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import useChatStore from "stores/chatStore";
 import { useStatusStore } from "stores/statusStore";
 
@@ -254,15 +254,6 @@ export const CopyableText: React.FC<{
     next({ stepId: "paymentProcessing" });
   }, []);
 
-  const truncateText = useMemo(
-    () => (text: string) => {
-      return label === "Gift ID" || text.length <= 7
-        ? text
-        : `${text.slice(0, 6)}...${text.slice(-4)}`;
-    },
-    [label],
-  );
-
   const getButtonText = () => {
     if (dialogMessage === "Have you sent the payment?") {
       return "Yes, I've sent the payment";
@@ -276,12 +267,17 @@ export const CopyableText: React.FC<{
     }
   };
 
+  const displayText =
+    isWallet && text.length > 10
+      ? `${text.slice(0, 6)}...${text.slice(-4)}`
+      : text;
+
   return (
     <div className="flex min-w-0 flex-col items-start gap-2 text-xs">
       {embedded ? (
         <div className="flex w-full min-w-0 items-center justify-between gap-2">
-          <span className="min-w-0 truncate text-gray-900" title={text}>
-            {truncateText(text)}
+          <span className="min-w-0 break-all text-gray-900" title={text}>
+            {displayText}
           </span>
           <Button
             ref={buttonRef}
@@ -307,9 +303,7 @@ export const CopyableText: React.FC<{
         </div>
       ) : (
         <>
-          {isWallet || label === "Transaction ID" ? (
-            <span title={text}>{truncateText(text)}</span>
-          ) : null}
+          <span className="break-all" title={text}>{displayText}</span>
           <Button
             ref={buttonRef}
             onClick={handleCopy}

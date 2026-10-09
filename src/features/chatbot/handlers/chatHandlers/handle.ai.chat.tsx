@@ -32,6 +32,13 @@ const COPYABLE_REPLY_FIELDS: Array<{
   patterns: RegExp[];
 }> = [
   {
+    label: "Crypto Amount",
+    patterns: [
+      /you\s+are\s+sending\s+([0-9]+(?:\.[0-9]+)?)/i,
+      /crypto\s*amount\s*(?:is|:|-)?\s*([0-9]+(?:\.[0-9]+)?)/i,
+    ],
+  },
+  {
     label: "Wallet Address",
     patterns: [
       /wallet\s*address\s*(?:is|:|-)?\s*([A-Za-z0-9][A-Za-z0-9:._-]{5,})/i,
@@ -127,7 +134,14 @@ const mergeCopyableItems = (
     if (!text) return false;
     if (suppressedLabels.has(item.label.toLowerCase())) return false;
 
-    const key = `${item.label}:${text}`;
+    // Treat labels such as "Crypto Amount (BTC)" and "Crypto Amount" as
+    // the same field. Structured items come first, so the asset-specific
+    // label is kept and the generic summary-parser fallback is discarded.
+    const normalizedLabel = item.label
+      .toLowerCase()
+      .replace(/\s*\([^)]*\)\s*$/, "")
+      .trim();
+    const key = `${normalizedLabel}:${text}`;
     if (seen.has(key)) return false;
 
     seen.add(key);
@@ -224,6 +238,10 @@ const buildDebitedReplyMessages = (
         props: {
           summary: `${payment.cryptoAmount} ${walletDebit.asset} has been debited from your ${walletDebit.network.toUpperCase()} wallet.`,
           items: [
+            {
+              label: `Crypto Amount (${walletDebit.asset})`,
+              text: String(payment.cryptoAmount),
+            },
             { label: "Transaction Hash", text: txHash },
             { label: "Transaction ID", text: payment.reference },
           ],
