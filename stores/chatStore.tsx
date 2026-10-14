@@ -4,6 +4,10 @@ import React from "react";
 import { StepId } from "@/core/machines/steps";
 import elementToJSXString from "react-element-to-jsx-string";
 import parse from "html-react-parser";
+import {
+  playReplyMessageSound,
+  playSentMessageSound,
+} from "@/utils/chatSounds";
 
 type MessageIntent =
   | { kind: "text"; value: string }
@@ -240,7 +244,14 @@ const useChatStore = create<ChatStore>()(
           set({ streamingMessage: text }),
 
         // when adding a message to the history, we serialize the JSX/text and save intent for components
-        addMessages: (msgs) =>
+        addMessages: (msgs) => {
+          if (msgs.some((msg) => msg.type === "outgoing")) {
+            playSentMessageSound();
+          }
+          if (msgs.some((msg) => msg.type === "incoming")) {
+            playReplyMessageSound();
+          }
+
           set((state) => {
             const serialized = msgs.map((msg) => {
               const base = {
@@ -280,7 +291,8 @@ const useChatStore = create<ChatStore>()(
               messages: nextMessages,
               serialized: nextSerializedMessages,
             };
-          }),
+          });
+        },
 
         setSerialized: (msgs) => set({ serialized: msgs }),
 

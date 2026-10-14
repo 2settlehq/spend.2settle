@@ -29,6 +29,10 @@ import {
   isValidInternationalPhoneNumber,
   normalizeInternationalPhoneNumber,
 } from "@/utils/phoneNumber";
+import {
+  looksLikeTransferRequest,
+  routePartialTransactionInputToForm,
+} from "@/services/ai/transaction-form-routing";
 // at top of the file (outside handler)
 type Sess = Record<string, any>;
 type PaymentType = "transfer" | "gift" | "request" | "report";
@@ -388,20 +392,6 @@ function looksLikeCreateGiftRequest(phrase: string, currentSession: Sess = {}) {
       /\b(?:creat(?:e|ing)|send(?:ing)?|mak(?:e|ing)|generat(?:e|ing))(?:\s+(?:one|it))?\s+instead\b/i.test(
         phrase,
       ))
-  );
-}
-
-function looksLikeTransferRequest(phrase: string) {
-  if (
-    /\b(?:gift|request|claim|report|complain|track|status|check)\b/i.test(
-      phrase,
-    )
-  ) {
-    return false;
-  }
-
-  return /\b(?:transact|transfer|send|sell|withdraw|cash\s*out|pay)\b/i.test(
-    phrase,
   );
 }
 
@@ -2049,6 +2039,11 @@ export default async function handler(
       filtered.type = "transfer";
       filtered.transferFormMode = true;
     }
+
+    filtered = routePartialTransactionInputToForm(
+      filtered,
+      session[chatId],
+    );
 
     const baseSession = resetSessionForFlowChange(session[chatId], filtered);
     const bankDetailsChanged =
