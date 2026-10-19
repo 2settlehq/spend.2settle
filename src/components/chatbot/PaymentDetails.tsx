@@ -10,6 +10,7 @@ import GiftCode from "./GiftCode";
 import type { GiftPaymentTracking } from "@/services/gift-flow";
 import { cancelEnginePayment } from "@/services/enginePaymentService";
 import { useStatusStore } from "stores/statusStore";
+import { PrivacyConsentActionGate } from "./PrivacyConsentGate";
 
 export interface PaymentDetailItem {
   label: string;
@@ -146,58 +147,67 @@ export default function PaymentDetails({
 
         {walletItem && !preferredPaymentMethod && (
           <DetailField label="Choose payment option">
-            <div className="space-y-2.5">
-              <p className="text-xs text-gray-600">
-                {paymentMethod === "wallet"
-                  ? "Wallet connection selected."
-                  : paymentMethod === "copy"
-                    ? "Deposit wallet address selected."
-                    : "Would you like to connect your wallet or copy the deposit wallet address?"}
-              </p>
-              <div className={paymentMethod ? "flex items-center gap-2" : "grid grid-cols-2 gap-2"}>
-                {paymentMethod !== "copy" && (
-                  <ConnectWallet
-                    onOpenChange={(open) => {
-                      if (open) setPaymentMethod("wallet");
-                    }}
-                  />
-                )}
-                {paymentMethod !== "wallet" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void copyWalletAddress()}
-                    aria-label="Copy deposit wallet address"
-                    className="h-9 rounded-full border-blue-200 px-2 text-xs text-blue-700 hover:bg-blue-50"
-                  >
-                    {walletCopied ? (
-                      <>
-                        <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                        Copy address
-                      </>
+            <PrivacyConsentActionGate>
+              {(requestPrivacyConsent) => (
+                <div className="space-y-2.5">
+                  <p className="text-xs text-gray-600">
+                    {paymentMethod === "wallet"
+                      ? "Wallet connection selected."
+                      : paymentMethod === "copy"
+                        ? "Deposit wallet address selected."
+                        : "Would you like to connect your wallet or copy the deposit wallet address?"}
+                  </p>
+                  <div className={paymentMethod ? "flex items-center gap-2" : "grid grid-cols-2 gap-2"}>
+                    {paymentMethod !== "copy" && (
+                      <ConnectWallet
+                        beforeOpen={requestPrivacyConsent}
+                        onOpenChange={(open) => {
+                          if (open) setPaymentMethod("wallet");
+                        }}
+                      />
                     )}
-                  </Button>
-                )}
-                {paymentMethod && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => {
-                      setPaymentMethod(null);
-                      setWalletCopied(false);
-                    }}
-                    className="h-8 px-2 text-[11px] text-gray-500"
-                  >
-                    Change method
-                  </Button>
-                )}
-              </div>
-            </div>
+                    {paymentMethod !== "wallet" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          void requestPrivacyConsent().then((accepted) => {
+                            if (accepted) void copyWalletAddress();
+                          });
+                        }}
+                        aria-label="Copy deposit wallet address"
+                        className="h-9 rounded-full border-blue-200 px-2 text-xs text-blue-700 hover:bg-blue-50"
+                      >
+                        {walletCopied ? (
+                          <>
+                            <Check className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                            Copy address
+                          </>
+                        )}
+                      </Button>
+                    )}
+                    {paymentMethod && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setPaymentMethod(null);
+                          setWalletCopied(false);
+                        }}
+                        className="h-8 px-2 text-[11px] text-gray-500"
+                      >
+                        Change method
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </PrivacyConsentActionGate>
           </DetailField>
         )}
 

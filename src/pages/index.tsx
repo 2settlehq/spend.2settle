@@ -71,7 +71,7 @@ const Home: NextPage = () => {
         <meta name="author" content="2Settle Team" />
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
         />
         <meta name="theme-color" content="#ffffff" />
 

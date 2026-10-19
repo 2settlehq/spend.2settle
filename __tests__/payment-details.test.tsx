@@ -2,6 +2,10 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PaymentDetails from "@/components/chatbot/PaymentDetails";
+import {
+  PRIVACY_CONSENT_STORAGE_KEY,
+  PRIVACY_POLICY_VERSION,
+} from "@/components/chatbot/PrivacyConsentGate";
 import { useStatusStore } from "stores/statusStore";
 
 const { cancelEnginePayment } = vi.hoisted(() => ({
@@ -20,11 +24,19 @@ vi.mock("@/services/enginePaymentService", () => ({ cancelEnginePayment }));
 beforeEach(() => {
   cancelEnginePayment.mockReset();
   useStatusStore.getState().clearAllStatuses();
+  window.localStorage.setItem(
+    PRIVACY_CONSENT_STORAGE_KEY,
+    JSON.stringify({
+      accepted: true,
+      acceptedAt: "2026-10-19T10:00:00.000Z",
+      policyVersion: PRIVACY_POLICY_VERSION,
+    }),
+  );
 });
 afterEach(cleanup);
 
 describe("payment details compatibility", () => {
-  it("shows old gift tracking references as copyable Transaction IDs, not Gift IDs", () => {
+  it("shows old gift tracking references as copyable Transaction IDs, not Gift IDs", async () => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: vi.fn().mockResolvedValue(undefined) },
@@ -43,7 +55,7 @@ describe("payment details compatibility", () => {
     expect(screen.getByRole("button", { name: "Connect Wallet" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Copy deposit wallet address" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Copy deposit wallet address" }));
-    expect(screen.getByText("deposit-wallet")).toBeTruthy();
+    expect(await screen.findByText("deposit-wallet")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect Wallet" })).toBeNull();
   });
   it("hides the copyable deposit address when wallet connection is selected", () => {

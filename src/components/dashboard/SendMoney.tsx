@@ -104,7 +104,7 @@ const SendMoney = ({ onSubmit }: SendMoneyProps) => {
           }}
           formatAsCurrency={estimation !== "crypto"}
           placeholder="Enter amount"
-          className="h-full min-w-0 flex-1 rounded-none border-0 bg-white px-2 text-sm text-gray-900 shadow-none outline-none placeholder:text-gray-400 focus-visible:ring-0"
+          className="h-full min-w-0 flex-1 rounded-none border-0 bg-white px-2 text-base text-gray-900 shadow-none outline-none placeholder:text-gray-400 focus-visible:ring-0 md:text-sm"
         />
 
         <Button

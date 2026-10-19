@@ -5,7 +5,6 @@ import ConfirmAndProceedButton from "@/hooks/chatbot/confirmButtonHook";
 import TransferForm from "@/components/chatbot/TransferForm";
 import PaymentDetails from "@/components/chatbot/PaymentDetails";
 import GiftCode from "@/components/chatbot/GiftCode";
-import { PrivacyConsentGate } from "@/components/chatbot/PrivacyConsentGate";
 import {
   ClaimGiftForm,
   FulfillRequestForm,
@@ -30,14 +29,6 @@ const componentMap: Record<string, React.ComponentType<any>> = {
   FulfillRequestForm,
   ReportForm,
 };
-
-const PRIVACY_GATED_COMPONENTS = new Set([
-  "TransferForm",
-  "GiftForm",
-  "RequestPaymentForm",
-  "ClaimGiftForm",
-  "FulfillRequestForm",
-]);
 
 export const renderMessageContent = (msg: MessageType) => {
   const intent = msg.intent;
@@ -75,13 +66,7 @@ export const renderMessageContent = (msg: MessageType) => {
                   : "flex justify-center"
               }
             >
-              {PRIVACY_GATED_COMPONENTS.has(intent.name) ? (
-                <PrivacyConsentGate>
-                  <Comp {...intent.props} />
-                </PrivacyConsentGate>
-              ) : (
-                <Comp {...intent.props} />
-              )}
+              <Comp {...intent.props} />
             </div>
           );
         })()}

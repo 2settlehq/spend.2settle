@@ -35,11 +35,13 @@ import { probeWalletConnectRelay } from "@/lib/wallets/walletConnectRelay";
 interface ConnectWalletProps {
   onOpenChange?: (open: boolean) => void;
   onConnected?: () => void;
+  beforeOpen?: () => boolean | Promise<boolean>;
 }
 
 const ConnectWallet = ({
   onOpenChange,
   onConnected,
+  beforeOpen,
 }: ConnectWalletProps = {}) => {
   // EVM, BTC or TRON — all shown the same way once connected
   const wallet = useConnectedWallet();
@@ -130,9 +132,19 @@ const ConnectWallet = ({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
+        if (nextOpen && beforeOpen) {
+          void Promise.resolve(beforeOpen()).then((allowed) => {
+            if (!allowed) return;
+            setOpen(true);
+            void warnIfRelayBlocked(true);
+            onOpenChange?.(true);
+          });
+          return;
+        }
+
         setOpen(nextOpen);
         if (!nextOpen) setOpeningWallets(false);
-        warnIfRelayBlocked(nextOpen);
+        void warnIfRelayBlocked(nextOpen);
         onOpenChange?.(nextOpen);
       }}
     >

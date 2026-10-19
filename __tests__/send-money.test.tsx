@@ -32,6 +32,8 @@ describe("homepage amount control", () => {
     )!;
 
     expect(currency.textContent).toContain("₦");
+    expect(amount.className).toContain("text-base");
+    expect(amount.className).toContain("md:text-sm");
     fireEvent.focus(amount);
     fireEvent.change(amount, { target: { value: "1250.5" } });
     expect(amount.value).toBe("1,250.5");

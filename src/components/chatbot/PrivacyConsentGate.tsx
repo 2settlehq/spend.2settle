@@ -1,14 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import React, { type ReactNode, useEffect, useId, useState } from "react";
+import React, {
+  type ReactNode,
+  useRef,
+  useState,
+} from "react";
 import { ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const PRIVACY_POLICY_VERSION = "2026-08-20";
 export const PRIVACY_CONSENT_STORAGE_KEY =
   "2settle:privacy-policy-consent";
-const PRIVACY_CONSENT_EVENT = "2settle:privacy-policy-consent-accepted";
 
 type StoredPrivacyConsent = {
   accepted: true;
@@ -16,7 +27,9 @@ type StoredPrivacyConsent = {
   policyVersion: string;
 };
 
-function hasStoredPrivacyConsent(): boolean {
+export function hasStoredPrivacyConsent(): boolean {
+  if (typeof window === "undefined") return false;
+
   try {
     const stored = window.localStorage.getItem(PRIVACY_CONSENT_STORAGE_KEY);
     if (!stored) return false;
@@ -31,28 +44,37 @@ function hasStoredPrivacyConsent(): boolean {
   }
 }
 
-export function PrivacyConsentGate({ children }: { children: ReactNode }) {
-  const titleId = useId();
-  const [accepted, setAccepted] = useState<boolean | null>(null);
-  const [declined, setDeclined] = useState(false);
+type PrivacyConsentActionGateProps = {
+  children: (requestPrivacyConsent: () => Promise<boolean>) => ReactNode;
+};
 
-  useEffect(() => {
-    setAccepted(hasStoredPrivacyConsent());
+/**
+ * Leaves transaction forms visible and asks for consent only when a wallet
+ * action calls requestPrivacyConsent(). The selected action can then continue
+ * after the user accepts.
+ */
+export function PrivacyConsentActionGate({
+  children,
+}: PrivacyConsentActionGateProps) {
+  const [open, setOpen] = useState(false);
+  const resolver = useRef<((accepted: boolean) => void) | null>(null);
 
-    const handleAccepted = () => setAccepted(true);
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === PRIVACY_CONSENT_STORAGE_KEY) {
-        setAccepted(hasStoredPrivacyConsent());
-      }
-    };
+  const finishRequest = (accepted: boolean) => {
+    const resolve = resolver.current;
+    resolver.current = null;
+    setOpen(false);
+    resolve?.(accepted);
+  };
 
-    window.addEventListener(PRIVACY_CONSENT_EVENT, handleAccepted);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener(PRIVACY_CONSENT_EVENT, handleAccepted);
-      window.removeEventListener("storage", handleStorage);
-    };
-  }, []);
+  const requestPrivacyConsent = () => {
+    if (hasStoredPrivacyConsent()) return Promise.resolve(true);
+
+    return new Promise<boolean>((resolve) => {
+      resolver.current?.(false);
+      resolver.current = resolve;
+      setOpen(true);
+    });
+  };
 
   const acceptPrivacyPolicy = () => {
     const consent: StoredPrivacyConsent = {
@@ -70,79 +92,63 @@ export function PrivacyConsentGate({ children }: { children: ReactNode }) {
       console.warn("Privacy consent could not be saved:", error);
     }
 
-    setAccepted(true);
-    setDeclined(false);
-    window.dispatchEvent(new Event(PRIVACY_CONSENT_EVENT));
+    finishRequest(true);
   };
 
-  if (accepted === null) {
-    return (
-      <div
-        role="status"
-        className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500 shadow-sm"
-      >
-        Checking your privacy preference…
-      </div>
-    );
-  }
-
-  if (accepted) return <>{children}</>;
-
   return (
-    <section
-      aria-labelledby={titleId}
-      className="w-full rounded-xl border border-blue-200 bg-white p-4 shadow-sm"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <h2
-            id={titleId}
-            className="text-sm font-semibold text-gray-900"
-          >
-            Before your first transaction
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-gray-600">
-            Please confirm that you have read and accept the 2Settle{" "}
-            <Link
-              href="/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
+    <>
+      {children(requestPrivacyConsent)}
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && open) finishRequest(false);
+        }}
+      >
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md rounded-2xl">
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div className="text-left">
+                <DialogTitle className="text-base text-gray-900">
+                  Before using a wallet
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-5 text-gray-600">
+                  Please confirm that you have read and accept the 2Settle{" "}
+                  <Link
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-blue-600 underline underline-offset-2 hover:text-blue-700"
+                  >
+                    Privacy Policy
+                  </Link>
+                  . It explains how your personal and transaction information
+                  is collected, used, and protected.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <DialogFooter className="grid grid-cols-2 gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => finishRequest(false)}
+              className="h-10 border-gray-200 text-xs text-gray-600"
             >
-              Privacy Policy
-            </Link>
-            . It explains how your personal and transaction information is
-            collected, used, and protected.
-          </p>
-        </div>
-      </div>
-
-      {declined && (
-        <p role="alert" className="mt-3 text-xs leading-5 text-red-600">
-          You must accept the Privacy Policy before starting a transaction.
-        </p>
-      )}
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setDeclined(true)}
-          className="h-9 border-gray-200 text-xs text-gray-600"
-        >
-          Not now
-        </Button>
-        <Button
-          type="button"
-          onClick={acceptPrivacyPolicy}
-          className="h-9 bg-blue-500 text-xs text-white hover:bg-blue-600"
-        >
-          I accept
-        </Button>
-      </div>
-    </section>
+              Not now
+            </Button>
+            <Button
+              type="button"
+              onClick={acceptPrivacyPolicy}
+              className="h-10 bg-blue-500 text-xs text-white hover:bg-blue-600"
+            >
+              I accept
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

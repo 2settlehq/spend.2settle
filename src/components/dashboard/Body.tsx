@@ -354,7 +354,11 @@ export default function Body() {
       {renderChat()}
 
       {isOpen && (
-        <div className="fixed inset-0 z-40">
+        <div
+          className={`fixed inset-0 z-40 ${
+            isMobile ? "overflow-hidden bg-white" : ""
+          }`}
+        >
           <ErrorBoundary
             fallback={
               <div className="p-4 bg-white rounded-lg shadow-lg">

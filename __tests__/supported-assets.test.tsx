@@ -10,6 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
 import { useWalletStore } from "@/hooks/wallet/useWalletStore";
 import TransferForm from "@/components/chatbot/TransferForm";
+import {
+  PRIVACY_CONSENT_STORAGE_KEY,
+  PRIVACY_POLICY_VERSION,
+} from "@/components/chatbot/PrivacyConsentGate";
 
 // The form components use JSX without importing React
 vi.hoisted(() => {
@@ -47,6 +51,17 @@ function supported() {
   };
 }
 
+function recordPrivacyConsent() {
+  window.localStorage.setItem(
+    PRIVACY_CONSENT_STORAGE_KEY,
+    JSON.stringify({
+      accepted: true,
+      acceptedAt: "2026-10-19T10:00:00.000Z",
+      policyVersion: PRIVACY_POLICY_VERSION,
+    }),
+  );
+}
+
 describe("useSupportedAssets", () => {
   beforeEach(() => useWalletStore.getState().clearWallet());
   afterEach(cleanup);
@@ -81,50 +96,53 @@ describe("useSupportedAssets", () => {
 });
 
 describe("TransferForm with a connected wallet", () => {
-  beforeEach(() => useWalletStore.getState().clearWallet());
+  beforeEach(() => {
+    useWalletStore.getState().clearWallet();
+    recordPrivacyConsent();
+  });
   afterEach(cleanup);
 
-  it("clears an AI preset the wallet can't pay with", () => {
+  it("clears an AI preset the wallet can't pay with", async () => {
     useWalletStore.getState().setWallet("EVM", EVM_ADDRESS, 1);
     render(<TransferForm initialValues={{ crypto: "USDT", network: "TRC20" }} />);
     fireEvent.click(screen.getByRole("button", { name: "Use Ethereum" }));
 
     expect(
-      screen.getByText("Showing assets your connected Ethereum wallet can pay with."),
+      await screen.findByText("Showing assets your connected Ethereum wallet can pay with."),
     ).toBeTruthy();
     // USDT stays (ERC20 is payable) and the network is set to the only option
     expect(screen.getByRole("combobox", { name: "Crypto asset" }).textContent).toContain("USDT");
     expect(screen.getByRole("combobox", { name: "Network" }).textContent).toContain("ERC20");
   });
 
-  it("empties the asset when it isn't payable at all", () => {
+  it("empties the asset when it isn't payable at all", async () => {
     useWalletStore.getState().setWallet("EVM", EVM_ADDRESS, 1);
     render(<TransferForm initialValues={{ crypto: "BTC" }} />);
     fireEvent.click(screen.getByRole("button", { name: "Use Ethereum" }));
 
-    expect(screen.getByRole("combobox", { name: "Crypto asset" }).textContent).toContain(
+    expect((await screen.findByRole("combobox", { name: "Crypto asset" })).textContent).toContain(
       "Select asset",
     );
   });
 
-  it("keeps the preset and shows no hint with no wallet", () => {
+  it("keeps the preset and shows no hint with no wallet", async () => {
     render(<TransferForm initialValues={{ crypto: "BTC" }} />);
 
     expect(screen.queryByRole("combobox", { name: "Crypto asset" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Wallet address" }));
 
-    expect(screen.getByRole("combobox", { name: "Crypto asset" }).textContent).toContain("BTC");
+    expect((await screen.findByRole("combobox", { name: "Crypto asset" })).textContent).toContain("BTC");
     expect(screen.queryByText(/Showing assets your connected/)).toBeNull();
   });
 
-  it("explains an unsupported chain and offers to switch instead of an empty list", () => {
+  it("explains an unsupported chain and offers to switch instead of an empty list", async () => {
     useWalletStore.getState().setWallet("EVM", EVM_ADDRESS, 8453);
     render(<TransferForm initialValues={{ crypto: "ETH" }} />);
     fireEvent.click(
       screen.getByRole("button", { name: "Use an unsupported EVM network" }),
     );
 
-    expect(screen.getByText("Base")).toBeTruthy();
+    expect(await screen.findByText("Base")).toBeTruthy();
     const assetSelect = screen.getByRole("combobox", { name: "Crypto asset" });
     expect(assetSelect.hasAttribute("disabled")).toBe(true);
 
