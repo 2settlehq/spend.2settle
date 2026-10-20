@@ -132,6 +132,7 @@ describe("TransferForm with a connected wallet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Wallet address" }));
 
     expect((await screen.findByRole("combobox", { name: "Crypto asset" })).textContent).toContain("BTC");
+    expect(screen.getByLabelText("Description (optional)").getAttribute("maxlength")).toBe("250");
     expect(screen.queryByText(/Showing assets your connected/)).toBeNull();
   });
 

@@ -44,6 +44,7 @@ export interface TransferFormData {
   accountDetailsConfirmed: boolean;
   phoneCountry: string;
   phoneNumber: string;
+  description?: string;
 }
 
 export interface GiftFormData {
@@ -53,6 +54,7 @@ export interface GiftFormData {
   amount: string;
   phoneCountry: string;
   phoneNumber: string;
+  description?: string;
 }
 
 export interface RequestPaymentFormData {
@@ -64,6 +66,7 @@ export interface RequestPaymentFormData {
   accountDetailsConfirmed: boolean;
   phoneCountry: string;
   phoneNumber: string;
+  description?: string;
 }
 
 export interface ClaimGiftFormData {

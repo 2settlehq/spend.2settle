@@ -59,6 +59,7 @@ interface FormState {
   accountDetailsConfirmed: boolean;
   phoneCountry: string;
   phoneNumber: string;
+  description: string;
 }
 
 interface TransferFormProps {
@@ -78,6 +79,7 @@ const initialState: FormState = {
   accountDetailsConfirmed: false,
   phoneCountry: "NG",
   phoneNumber: "",
+  description: "",
 };
 
 const getInitialState = (initialValues?: Partial<FormState>): FormState => {
@@ -304,6 +306,7 @@ export default function TransferForm({
       { label: "Bank", value: form.bankName },
       { label: "Account number", value: form.accountNumber },
       { label: "Phone number", value: internationalPhoneNumber },
+      { label: "Description", value: form.description.trim() },
     ].filter(({ value }) => Boolean(value));
 
     return (
@@ -522,6 +525,23 @@ export default function TransferForm({
           }))
         }
       />
+
+      <div className="relative col-span-2 min-w-0 pt-2">
+        <Label
+          htmlFor="chat-transfer-description"
+          className={FLOATING_LABEL_CLASS}
+        >
+          Description (optional)
+        </Label>
+        <Input
+          id="chat-transfer-description"
+          value={form.description}
+          onChange={(event) => update("description", event.target.value)}
+          placeholder="What is this payment for?"
+          maxLength={250}
+          className="h-9 px-2.5 !text-base md:!text-xs"
+        />
+      </div>
 
       {form.accountName && (
         <fieldset className="col-span-2 space-y-1.5 rounded-lg border border-gray-200 bg-gray-50 p-2.5">

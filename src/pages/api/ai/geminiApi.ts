@@ -101,6 +101,7 @@ interface CreatePaymentInput {
   chargeFrom?: "fiat" | "crypto";
   payer?: { chatId: string; phone?: string };
   receiver?: { bankCode: string; accountNumber: string };
+  description?: string;
 }
 
 interface CreateRequestPaymentInput {
@@ -112,6 +113,7 @@ interface CreateRequestPaymentInput {
     accountNumber: string;
     phone: string;
   };
+  description?: string;
 }
 
 interface PaymentResponse {
@@ -156,6 +158,7 @@ interface TransferFormPayload {
   accountDetailsConfirmed: boolean;
   phoneCountry: string;
   phoneNumber: string;
+  description?: string;
 }
 
 interface GiftFormPayload {
@@ -165,6 +168,7 @@ interface GiftFormPayload {
   amount: string;
   phoneCountry: string;
   phoneNumber: string;
+  description?: string;
 }
 
 interface BankFormPayload {
@@ -179,6 +183,7 @@ interface RequestPaymentFormPayload extends BankFormPayload {
   amount: string;
   phoneCountry: string;
   phoneNumber: string;
+  description?: string;
 }
 
 interface ClaimGiftFormPayload extends BankFormPayload {
@@ -1200,6 +1205,7 @@ function normalizeTransferForm(
     phoneCountry,
     String(transferForm?.phoneNumber ?? ""),
   );
+  const description = normalizePaymentDescription(transferForm?.description);
   let network = String(transferForm?.network ?? "").toUpperCase();
 
   if (crypto === "BTC") network = "BTC";
@@ -1255,7 +1261,16 @@ function normalizeTransferForm(
     accountDetailsConfirmed: true,
     phoneCountry,
     phoneNumber,
+    description,
   };
+}
+
+function normalizePaymentDescription(value: unknown) {
+  const description = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (description.length > 250) {
+    throw new Error("Keep the description within 250 characters.");
+  }
+  return description;
 }
 
 function normalizeCryptoFields(input: {
@@ -1483,6 +1498,7 @@ export default async function handler(
       const phoneFields = normalizePhoneFields(giftForm as GiftFormPayload);
       const estimation = String(giftForm.estimation ?? "").toLowerCase();
       const amount = String(giftForm.amount ?? "").replace(/[^\d.]/g, "");
+      const description = normalizePaymentDescription(giftForm.description);
 
       if (!SUPPORTED_ESTIMATIONS.has(estimation)) {
         throw new Error("Select a valid estimation type.");
@@ -1497,6 +1513,7 @@ export default async function handler(
         Amount: amount,
         receiver_phoneCountry: phoneFields.phoneCountry,
         receiver_phoneNumber: phoneFields.phoneNumber,
+        description,
         isReadyForPayment: true,
       };
       session[chatId] = updatedSession;
@@ -1513,6 +1530,7 @@ export default async function handler(
         network: updatedSession.network,
         chargeFrom: "crypto",
         payer: { chatId, phone: updatedSession.receiver_phoneNumber },
+        ...(description ? { description } : {}),
       });
 
       updatedSession.totalcrypto = payment.cryptoAmount;
@@ -1545,6 +1563,9 @@ export default async function handler(
         /[^\d.]/g,
         "",
       );
+      const description = normalizePaymentDescription(
+        requestPaymentForm.description,
+      );
       if (!isValidAmount(amount)) throw new Error("Enter a valid amount.");
 
       const updatedSession: Sess = {
@@ -1558,6 +1579,7 @@ export default async function handler(
         accountDetailsConfirmed: true,
         receiver_phoneCountry: phone.phoneCountry,
         receiver_phoneNumber: phone.phoneNumber,
+        description,
         isReadyForPayment: true,
       };
       session[chatId] = updatedSession;
@@ -1578,6 +1600,7 @@ export default async function handler(
           accountNumber: bank.accountNumber,
           phone: phone.phoneNumber,
         },
+        ...(description ? { description } : {}),
       });
       updatedSession.amountString = payment.fiatAmount;
       updatedSession.id = payment.reference;
@@ -1834,6 +1857,7 @@ export default async function handler(
         accountDetailsConfirmed: normalizedForm.accountDetailsConfirmed,
         receiver_phoneCountry: normalizedForm.phoneCountry,
         receiver_phoneNumber: normalizedForm.phoneNumber,
+        description: normalizedForm.description,
       };
 
       userAcctDetail[chatId] = {
@@ -1875,6 +1899,9 @@ export default async function handler(
           bankCode: updatedSession.bankcode,
           accountNumber: updatedSession.acct_number,
         },
+        ...(normalizedForm.description
+          ? { description: normalizedForm.description }
+          : {}),
       };
 
       const payment = await createEnginePayment(paymentInput);

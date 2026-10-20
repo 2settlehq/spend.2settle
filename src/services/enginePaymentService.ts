@@ -55,6 +55,7 @@ interface CreatePaymentInput {
   chargeFrom?: "fiat" | "crypto";
   payer?: { chatId: string; phone?: string };
   receiver?: { bankCode: string; accountNumber: string };
+  description?: string;
 }
 
 interface CreateRequestPaymentInput {
@@ -66,6 +67,7 @@ interface CreateRequestPaymentInput {
     accountNumber: string;
     phone: string;
   };
+  description?: string;
 }
 
 interface FulfillRequestInput {
@@ -142,6 +144,7 @@ export async function createEnginePayment(
 
   if (input.fiatAmount !== undefined) body.fiatAmount = input.fiatAmount;
   if (input.receiver) body.receiver = input.receiver;
+  if (input.description) body.description = input.description;
 
   if (input.type !== "request") {
     if (input.cryptoAmount !== undefined) body.cryptoAmount = input.cryptoAmount;

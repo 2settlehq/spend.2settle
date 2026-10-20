@@ -94,6 +94,71 @@ function SubmittedNotice({ children }: { children: ReactNode }) {
   );
 }
 
+function formatSummaryAmount(
+  amount: string,
+  estimation: string,
+  crypto?: string,
+) {
+  const numericAmount = Number(amount.replace(/,/g, ""));
+  if (!Number.isFinite(numericAmount)) return amount;
+
+  if (estimation === "crypto") {
+    return `${new Intl.NumberFormat("en-US", {
+      maximumFractionDigits: 18,
+    }).format(numericAmount)} ${crypto ?? "crypto"}`;
+  }
+
+  return new Intl.NumberFormat(estimation === "dollar" ? "en-US" : "en-NG", {
+    style: "currency",
+    currency: estimation === "dollar" ? "USD" : "NGN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numericAmount);
+}
+
+function SubmittedSummary({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ label: string; value: string }>;
+}) {
+  const visibleItems = items.filter(({ value }) => Boolean(value));
+
+  return (
+    <div className="w-full rounded-xl border border-blue-200 bg-white px-4 py-3 text-xs text-gray-700 shadow-sm">
+      <div className="flex items-center gap-2 border-b border-blue-100 pb-2.5">
+        <span
+          aria-hidden="true"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[11px] font-bold text-white"
+        >
+          ✓
+        </span>
+        <div>
+          <p className="font-semibold text-gray-900">{title}</p>
+          <p className="mt-0.5 text-[10px] text-gray-500">
+            Transaction summary
+          </p>
+        </div>
+      </div>
+
+      <dl className="mt-2.5 divide-y divide-gray-100">
+        {visibleItems.map(({ label, value }) => (
+          <div
+            key={label}
+            className="flex items-start justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+          >
+            <dt className="shrink-0 text-[11px] text-gray-500">{label}</dt>
+            <dd className="min-w-0 break-words text-right text-[11px] font-medium text-gray-800">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 function FormError({ message }: { message: string }) {
   return message ? (
     <p className="col-span-2 text-[11px] text-red-600">{message}</p>
@@ -476,11 +541,16 @@ export function GiftForm({
     amount: initialValues?.amount || "",
     phoneCountry: phone.countryCode,
     phoneNumber: phone.nationalNumber,
+    description: initialValues?.description || "",
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethodChoiceValue | null>(null);
+  const internationalPhoneNumber = normalizeInternationalPhoneNumber(
+    form.phoneCountry,
+    form.phoneNumber,
+  );
   const { submitted, complete } = useSubmittedState(
     formId,
     "completed-gift-form",
@@ -492,10 +562,7 @@ export function GiftForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const phoneNumber = normalizeInternationalPhoneNumber(
-      form.phoneCountry,
-      form.phoneNumber,
-    );
+    const phoneNumber = internationalPhoneNumber;
     if (
       !form.crypto ||
       !form.network ||
@@ -528,7 +595,25 @@ export function GiftForm({
   };
 
   if (submitted) {
-    return <SubmittedNotice>Gift details submitted.</SubmittedNotice>;
+    return (
+      <SubmittedSummary
+        title="Gift details submitted"
+        items={[
+          {
+            label: "Amount",
+            value: formatSummaryAmount(
+              form.amount,
+              form.estimation,
+              form.crypto,
+            ),
+          },
+          { label: "Crypto", value: form.crypto },
+          { label: "Network", value: form.network },
+          { label: "Phone number", value: internationalPhoneNumber },
+          { label: "Description", value: form.description?.trim() ?? "" },
+        ]}
+      />
+    );
   }
 
   if (!paymentMethod) {
@@ -564,6 +649,19 @@ export function GiftForm({
         onAmountChange={(amount) => update({ amount })}
         restrictToConnectedWallet={paymentMethod === "wallet"}
       />
+      <div className={`${FIELD_CLASS} col-span-2`}>
+        <Label htmlFor="chat-gift-description" className={FLOATING_LABEL_CLASS}>
+          Description (optional)
+        </Label>
+        <Input
+          id="chat-gift-description"
+          value={form.description ?? ""}
+          onChange={(event) => update({ description: event.target.value })}
+          placeholder="What is this gift for?"
+          maxLength={250}
+          className={INPUT_CLASS}
+        />
+      </div>
       <div className="col-span-2 grid grid-cols-3 items-end gap-2.5">
         <PhoneField
           idPrefix="chat-gift"
@@ -606,9 +704,14 @@ export function RequestPaymentForm({
     accountDetailsConfirmed: false,
     phoneCountry: phone.countryCode,
     phoneNumber: phone.nationalNumber,
+    description: initialValues?.description || "",
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const internationalPhoneNumber = normalizeInternationalPhoneNumber(
+    form.phoneCountry,
+    form.phoneNumber,
+  );
   const { submitted, complete } = useSubmittedState(
     formId,
     "completed-request-payment-form",
@@ -620,10 +723,7 @@ export function RequestPaymentForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const phoneNumber = normalizeInternationalPhoneNumber(
-      form.phoneCountry,
-      form.phoneNumber,
-    );
+    const phoneNumber = internationalPhoneNumber;
     if (
       !form.amount ||
       !form.bankName ||
@@ -646,7 +746,22 @@ export function RequestPaymentForm({
   };
 
   if (submitted) {
-    return <SubmittedNotice>Payment request details submitted.</SubmittedNotice>;
+    return (
+      <SubmittedSummary
+        title="Payment request details submitted"
+        items={[
+          {
+            label: "Amount",
+            value: formatSummaryAmount(form.amount, "naira"),
+          },
+          { label: "Recipient", value: form.accountName },
+          { label: "Bank", value: form.bankName },
+          { label: "Account number", value: form.accountNumber },
+          { label: "Phone number", value: internationalPhoneNumber },
+          { label: "Description", value: form.description?.trim() ?? "" },
+        ]}
+      />
+    );
   }
 
   return (
@@ -670,6 +785,19 @@ export function RequestPaymentForm({
         confirmed={form.accountDetailsConfirmed}
         onChange={update}
       />
+      <div className={`${FIELD_CLASS} col-span-2`}>
+        <Label htmlFor="chat-request-description" className={FLOATING_LABEL_CLASS}>
+          Description (optional)
+        </Label>
+        <Input
+          id="chat-request-description"
+          value={form.description ?? ""}
+          onChange={(event) => update({ description: event.target.value })}
+          placeholder="What is this request for?"
+          maxLength={250}
+          className={INPUT_CLASS}
+        />
+      </div>
       <div className="col-span-2 grid grid-cols-3 items-end gap-2.5">
         <PhoneField
           idPrefix="chat-request"
