@@ -66,7 +66,10 @@ export const renderMessageContent = (msg: MessageType) => {
                   : "flex justify-center"
               }
             >
-              <Comp {...intent.props} />
+              <Comp
+                key={intent.props?.formId ?? intent.name}
+                {...intent.props}
+              />
             </div>
           );
         })()}

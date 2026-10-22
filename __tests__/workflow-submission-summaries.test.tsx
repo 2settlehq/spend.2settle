@@ -72,6 +72,7 @@ beforeEach(() => {
       accepted: true,
       acceptedAt: "2026-10-20T10:00:00.000Z",
       policyVersion: PRIVACY_POLICY_VERSION,
+      skipFuturePrompts: true,
     }),
   );
 });
@@ -98,6 +99,65 @@ describe("workflow submission summaries", () => {
     expect(screen.getByText(/5,000\.00/)).toBeTruthy();
     expect(screen.getAllByText("BTC")).toHaveLength(2);
     expect(screen.getByText("Birthday present")).toBeTruthy();
+  });
+
+  it("restores the submitted gift values after the page is revisited", async () => {
+    const formId = "gift-tron-1";
+    const { unmount } = render(
+      <GiftForm
+        formId={formId}
+        initialValues={{ crypto: "TRON", network: "TRC20" }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Wallet address" }));
+    fireEvent.change(await screen.findByLabelText("Amount (NGN)"), {
+      target: { value: "5000" },
+    });
+    fireEvent.change(screen.getByLabelText("Phone number"), {
+      target: { value: "7035194443" },
+    });
+    fireEvent.change(screen.getByLabelText("Description (optional)"), {
+      target: { value: "For a friend" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create gift" }));
+
+    expect(await screen.findByText("Gift details submitted")).toBeTruthy();
+    expect(screen.getByText("TRON")).toBeTruthy();
+    expect(screen.getByText("TRC20")).toBeTruthy();
+    expect(screen.getByText(/5,000\.00/)).toBeTruthy();
+
+    unmount();
+
+    render(
+      <GiftForm
+        formId={formId}
+        initialValues={{ crypto: "BTC", network: "BTC", amount: "" }}
+      />,
+    );
+
+    expect(await screen.findByText("Gift details submitted")).toBeTruthy();
+    expect(screen.getByText("TRON")).toBeTruthy();
+    expect(screen.getByText("TRC20")).toBeTruthy();
+    expect(screen.getByText(/5,000\.00/)).toBeTruthy();
+    expect(screen.queryByText("BTC")).toBeNull();
+    expect(screen.queryByText("₦0.00")).toBeNull();
+  });
+
+  it("does not invent BTC details for legacy completed gift forms", async () => {
+    window.localStorage.setItem("completed-gift-form:legacy-gift", "true");
+
+    render(
+      <GiftForm
+        formId="legacy-gift"
+        initialValues={{ crypto: "BTC", network: "BTC", amount: "" }}
+      />,
+    );
+
+    expect(await screen.findByText("Gift details submitted.")).toBeTruthy();
+    expect(screen.queryByText("Transaction summary")).toBeNull();
+    expect(screen.queryByText("BTC")).toBeNull();
+    expect(screen.queryByText("₦0.00")).toBeNull();
   });
 
   it("shows the submitted payment-request details", async () => {

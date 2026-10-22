@@ -64,26 +64,51 @@ const FORM_CLASS =
 const FIELD_CLASS = "relative min-w-0 pt-2";
 const INPUT_CLASS = "h-9 px-2.5 !text-base md:!text-xs";
 
-function useSubmittedState(formId: string | undefined, storagePrefix: string) {
+function useSubmittedState<T>(
+  formId: string | undefined,
+  storagePrefix: string,
+) {
   const [submitted, setSubmitted] = useState(false);
+  const [submittedData, setSubmittedData] = useState<T | null>(null);
 
   useEffect(() => {
-    if (
-      formId &&
-      window.localStorage.getItem(`${storagePrefix}:${formId}`) === "true"
-    ) {
+    setSubmitted(false);
+    setSubmittedData(null);
+
+    if (!formId) return;
+
+    const storedSubmission = window.localStorage.getItem(
+      `${storagePrefix}:${formId}`,
+    );
+    if (!storedSubmission) return;
+
+    // Older releases stored only a completion flag. Keep the completed state,
+    // but do not fabricate a summary from the form's original defaults.
+    if (storedSubmission === "true") {
       setSubmitted(true);
+      return;
+    }
+
+    try {
+      setSubmittedData(JSON.parse(storedSubmission) as T);
+      setSubmitted(true);
+    } catch {
+      // Ignore malformed storage and show a fresh form instead.
     }
   }, [formId, storagePrefix]);
 
-  const complete = () => {
+  const complete = (data?: T) => {
     if (formId) {
-      window.localStorage.setItem(`${storagePrefix}:${formId}`, "true");
+      window.localStorage.setItem(
+        `${storagePrefix}:${formId}`,
+        data === undefined ? "true" : JSON.stringify(data),
+      );
     }
+    setSubmittedData(data ?? null);
     setSubmitted(true);
   };
 
-  return { submitted, complete };
+  return { submitted, submittedData, complete };
 }
 
 function SubmittedNotice({ children }: { children: ReactNode }) {
@@ -99,6 +124,8 @@ function formatSummaryAmount(
   estimation: string,
   crypto?: string,
 ) {
+  if (!amount.trim()) return "";
+
   const numericAmount = Number(amount.replace(/,/g, ""));
   if (!Number.isFinite(numericAmount)) return amount;
 
@@ -551,10 +578,11 @@ export function GiftForm({
     form.phoneCountry,
     form.phoneNumber,
   );
-  const { submitted, complete } = useSubmittedState(
-    formId,
-    "completed-gift-form",
-  );
+  const { submitted, submittedData, complete } =
+    useSubmittedState<GiftFormData>(
+      formId,
+      "completed-gift-form",
+    );
   const update = (values: Partial<GiftFormData>) => {
     setForm((current) => ({ ...current, ...values }));
     setError("");
@@ -591,10 +619,14 @@ export function GiftForm({
       paymentMethod ?? undefined,
     );
     setIsSubmitting(false);
-    if (success) complete();
+    if (success) complete({ ...form, phoneNumber });
   };
 
   if (submitted) {
+    if (!submittedData) {
+      return <SubmittedNotice>Gift details submitted.</SubmittedNotice>;
+    }
+
     return (
       <SubmittedSummary
         title="Gift details submitted"
@@ -602,15 +634,18 @@ export function GiftForm({
           {
             label: "Amount",
             value: formatSummaryAmount(
-              form.amount,
-              form.estimation,
-              form.crypto,
+              submittedData.amount,
+              submittedData.estimation,
+              submittedData.crypto,
             ),
           },
-          { label: "Crypto", value: form.crypto },
-          { label: "Network", value: form.network },
-          { label: "Phone number", value: internationalPhoneNumber },
-          { label: "Description", value: form.description?.trim() ?? "" },
+          { label: "Crypto", value: submittedData.crypto },
+          { label: "Network", value: submittedData.network },
+          { label: "Phone number", value: submittedData.phoneNumber },
+          {
+            label: "Description",
+            value: submittedData.description?.trim() ?? "",
+          },
         ]}
       />
     );
@@ -712,10 +747,11 @@ export function RequestPaymentForm({
     form.phoneCountry,
     form.phoneNumber,
   );
-  const { submitted, complete } = useSubmittedState(
-    formId,
-    "completed-request-payment-form",
-  );
+  const { submitted, submittedData, complete } =
+    useSubmittedState<RequestPaymentFormData>(
+      formId,
+      "completed-request-payment-form",
+    );
   const update = (values: Partial<RequestPaymentFormData>) => {
     setForm((current) => ({ ...current, ...values }));
     setError("");
@@ -742,23 +778,32 @@ export function RequestPaymentForm({
       phoneNumber,
     });
     setIsSubmitting(false);
-    if (success) complete();
+    if (success) complete({ ...form, phoneNumber });
   };
 
   if (submitted) {
+    if (!submittedData) {
+      return (
+        <SubmittedNotice>Payment request details submitted.</SubmittedNotice>
+      );
+    }
+
     return (
       <SubmittedSummary
         title="Payment request details submitted"
         items={[
           {
             label: "Amount",
-            value: formatSummaryAmount(form.amount, "naira"),
+            value: formatSummaryAmount(submittedData.amount, "naira"),
           },
-          { label: "Recipient", value: form.accountName },
-          { label: "Bank", value: form.bankName },
-          { label: "Account number", value: form.accountNumber },
-          { label: "Phone number", value: internationalPhoneNumber },
-          { label: "Description", value: form.description?.trim() ?? "" },
+          { label: "Recipient", value: submittedData.accountName },
+          { label: "Bank", value: submittedData.bankName },
+          { label: "Account number", value: submittedData.accountNumber },
+          { label: "Phone number", value: submittedData.phoneNumber },
+          {
+            label: "Description",
+            value: submittedData.description?.trim() ?? "",
+          },
         ]}
       />
     );

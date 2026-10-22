@@ -50,13 +50,13 @@ describe("wallet-action privacy consent", () => {
 
     expect(screen.getByText("Transaction form")).toBeTruthy();
     expect(
-      screen.queryByRole("heading", { name: "Before using a wallet" }),
+      screen.queryByRole("heading", { name: "Before starting a transaction" }),
     ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Display wallet address" }));
 
     expect(
-      await screen.findByRole("heading", { name: "Before using a wallet" }),
+      await screen.findByRole("heading", { name: "Before starting a transaction" }),
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Privacy Policy" }).getAttribute("href")).toBe("/privacy");
     expect(onSelect).not.toHaveBeenCalled();
@@ -70,6 +70,7 @@ describe("wallet-action privacy consent", () => {
     expect(stored).toMatchObject({
       accepted: true,
       policyVersion: PRIVACY_POLICY_VERSION,
+      skipFuturePrompts: false,
     });
   });
 
@@ -82,19 +83,45 @@ describe("wallet-action privacy consent", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("heading", { name: "Before using a wallet" }),
+        screen.queryByRole("heading", {
+          name: "Before starting a transaction",
+        }),
       ).toBeNull();
     });
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it("continues immediately when consent was previously recorded", async () => {
+  it("asks again for a new transaction when future prompts were not disabled", async () => {
     window.localStorage.setItem(
       PRIVACY_CONSENT_STORAGE_KEY,
       JSON.stringify({
         accepted: true,
         acceptedAt: "2026-10-12T10:00:00.000Z",
         policyVersion: PRIVACY_POLICY_VERSION,
+        skipFuturePrompts: false,
+      }),
+    );
+    const onSelect = vi.fn();
+    render(<WalletActions onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Before starting a transaction",
+      }),
+    ).toBeTruthy();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("continues immediately when Don't show this again was selected", async () => {
+    window.localStorage.setItem(
+      PRIVACY_CONSENT_STORAGE_KEY,
+      JSON.stringify({
+        accepted: true,
+        acceptedAt: "2026-10-12T10:00:00.000Z",
+        policyVersion: PRIVACY_POLICY_VERSION,
+        skipFuturePrompts: true,
       }),
     );
     const onSelect = vi.fn();
@@ -104,7 +131,45 @@ describe("wallet-action privacy consent", () => {
 
     await waitFor(() => expect(onSelect).toHaveBeenCalledWith("wallet"));
     expect(
-      screen.queryByRole("heading", { name: "Before using a wallet" }),
+      screen.queryByRole("heading", { name: "Before starting a transaction" }),
+    ).toBeNull();
+  });
+
+  it("saves the Don't show this again choice", async () => {
+    const onSelect = vi.fn();
+    const { unmount } = render(<WalletActions onSelect={onSelect} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Display wallet address" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Don't show this again",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "I accept" }));
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith("copy"));
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(PRIVACY_CONSENT_STORAGE_KEY) ?? "{}",
+      ),
+    ).toMatchObject({
+      accepted: true,
+      policyVersion: PRIVACY_POLICY_VERSION,
+      skipFuturePrompts: true,
+    });
+
+    unmount();
+    const nextTransaction = vi.fn();
+    render(<WalletActions onSelect={nextTransaction} />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect wallet" }));
+
+    await waitFor(() =>
+      expect(nextTransaction).toHaveBeenCalledWith("wallet"),
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Before starting a transaction" }),
     ).toBeNull();
   });
 });

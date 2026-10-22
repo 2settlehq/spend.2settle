@@ -2072,7 +2072,13 @@ export default async function handler(
       session[chatId],
     );
 
-    const baseSession = resetSessionForFlowChange(session[chatId], filtered);
+    // An explicit "create gift" starts a new transaction, even when the
+    // previous session was also a gift. Reusing that session would reuse its
+    // form ID and allow the browser's completed-form snapshot to appear for a
+    // different transaction.
+    const baseSession = wantsToCreateGift
+      ? {}
+      : resetSessionForFlowChange(session[chatId], filtered);
     const bankDetailsChanged =
       (filtered.bank_name && filtered.bank_name !== baseSession.bank_name) ||
       (filtered.acct_number &&

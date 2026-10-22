@@ -58,6 +58,7 @@ function recordPrivacyConsent() {
       accepted: true,
       acceptedAt: "2026-10-19T10:00:00.000Z",
       policyVersion: PRIVACY_POLICY_VERSION,
+      skipFuturePrompts: true,
     }),
   );
 }
