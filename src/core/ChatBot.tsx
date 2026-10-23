@@ -8,6 +8,7 @@ import { useChatState } from "@/hooks/chatbot/useChatState";
 import { useChatUI } from "@/hooks/useChatUI";
 import { useGroupedMessages } from "@/hooks/useGroupedMessages";
 import { ChatBotProps } from "@/types/chatbot_types";
+import { getChatViewportMetrics } from "@/utils/chatViewport";
 import { GeistSans } from "geist/font/sans";
 import { useEffect } from "react";
 import useChatStore from "stores/chatStore";
@@ -47,19 +48,31 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     const previousBodyWidth = document.body.style.width;
     const previousRootOverflow = root.style.overflow;
     const viewport = window.visualViewport;
-    const initialHeight = window.innerHeight;
+    const initialHeight = getChatViewportMetrics({
+      innerHeight: window.innerHeight,
+      documentHeight: root.clientHeight,
+      visualViewport: viewport,
+    }).height;
     const pageScrollY = window.scrollY;
     let viewportFrame = 0;
+    const keyboardUpdateTimers: number[] = [];
+
     const updateViewportHeight = () => {
-      const height = viewport?.height ?? window.innerHeight;
+      const { height, top } = getChatViewportMetrics({
+        innerHeight: window.innerHeight,
+        documentHeight: root.clientHeight,
+        visualViewport: viewport,
+      });
       const keyboardOpen = initialHeight - height > 150;
       root.style.setProperty("--chat-viewport-height", `${height}px`);
-      root.style.setProperty("--chat-viewport-top", `${viewport?.offsetTop ?? 0}px`);
+      root.style.setProperty("--chat-viewport-top", `${top}px`);
       root.style.setProperty("--chat-bottom-inset", keyboardOpen ? "0px" : "env(safe-area-inset-bottom)");
       const chatbox = chatboxRef.current;
       const focusedField = document.activeElement;
       if (chatbox && focusedField instanceof HTMLElement && chatbox.contains(focusedField)) {
         requestAnimationFrame(() => focusedField.scrollIntoView({ block: "nearest" }));
+      } else if (chatbox && focusedField === textareaRef.current) {
+        chatbox.scrollTop = chatbox.scrollHeight;
       } else if (chatbox) {
         chatbox.scrollTop = chatbox.scrollHeight;
       }
@@ -67,6 +80,24 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     const scheduleViewportUpdate = () => {
       window.cancelAnimationFrame(viewportFrame);
       viewportFrame = window.requestAnimationFrame(updateViewportHeight);
+    };
+    const scheduleKeyboardAnimationUpdates = () => {
+      scheduleViewportUpdate();
+      for (const delay of [50, 150, 300, 500, 800]) {
+        keyboardUpdateTimers.push(
+          window.setTimeout(scheduleViewportUpdate, delay),
+        );
+      }
+    };
+    const handleFocusChange = (event: FocusEvent) => {
+      const target = event.target;
+      const chatRoot = chatboxRef.current?.parentElement;
+      if (
+        target instanceof HTMLElement &&
+        chatRoot?.contains(target)
+      ) {
+        scheduleKeyboardAnimationUpdates();
+      }
     };
 
     document.body.style.overflow = "hidden";
@@ -79,9 +110,12 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
     viewport?.addEventListener("scroll", scheduleViewportUpdate);
     window.addEventListener("resize", scheduleViewportUpdate);
     window.addEventListener("orientationchange", scheduleViewportUpdate);
+    document.addEventListener("focusin", handleFocusChange);
+    document.addEventListener("focusout", handleFocusChange);
 
     return () => {
       window.cancelAnimationFrame(viewportFrame);
+      keyboardUpdateTimers.forEach(window.clearTimeout);
       document.body.style.overflow = previousBodyOverflow;
       document.body.style.position = previousBodyPosition;
       document.body.style.top = previousBodyTop;
@@ -94,9 +128,11 @@ const ChatBot = ({ isMobile, onClose }: ChatBotProps) => {
       viewport?.removeEventListener("scroll", scheduleViewportUpdate);
       window.removeEventListener("resize", scheduleViewportUpdate);
       window.removeEventListener("orientationchange", scheduleViewportUpdate);
+      document.removeEventListener("focusin", handleFocusChange);
+      document.removeEventListener("focusout", handleFocusChange);
       if (pageScrollY) window.scrollTo(0, pageScrollY);
     };
-  }, [isMobile, chatboxRef]);
+  }, [isMobile, chatboxRef, textareaRef]);
 
   const layout = (
     <ChatLayout
