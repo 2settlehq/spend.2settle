@@ -22,10 +22,9 @@ export default async function handler(
     const raw = result.current_rate;
     const array_rate = raw.toString();
     const numRate = Number(array_rate);
-    const percentage = 0.8;
-    const increase = (percentage / 100) * numRate;
-    const rate = numRate - increase;
-    const data = rate.toLocaleString();
+    // `current_rate` already contains the customer-facing rate after the
+    // configured profit has been deducted from the merchant rate.
+    const data = numRate.toLocaleString();
 
     res.status(200).json({ rate: data });
   } catch (err) {

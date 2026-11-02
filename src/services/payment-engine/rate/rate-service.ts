@@ -200,13 +200,10 @@ async function fetchExchangeRateFromDb(fiatCurrency: FiatCurrency): Promise<Rate
     const merchantRate = parseRate(rateRow.merchant_rate || rateRow.current_rate);
     const profitRate = parseRate(rateRow.profit_rate || 0);
 
-    // Apply the 0.8% adjustment (matching your existing logic in /api/rates/rate.ts)
-    const percentage = 0.8;
-    const adjustment = (percentage / 100) * currentRate;
-    const adjustedRate = currentRate - adjustment;
-
     return {
-      exchangeRate: adjustedRate,
+      // `current_rate` is already the customer rate after profit has been
+      // deducted from `merchant_rate` by the payment engine.
+      exchangeRate: currentRate,
       merchantRate,
       profitRate,
     };
