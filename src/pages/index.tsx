@@ -61,7 +61,7 @@ const Home: NextPage = () => {
       <Head>
         <title>2Settle – Crypto to Fiat Payments for Africa</title>
         <meta
-          name="spend,send,integrate"
+          name="description"
           content="Send, spend, and integrate crypto payments seamlessly in Africa with 2Settle. Fast, secure, and reliable crypto-to-fiat conversion and payments."
         />
         <meta
@@ -69,6 +69,7 @@ const Home: NextPage = () => {
           content="crypto to fiat Africa, send crypto Nigeria, crypto payments, stablecoin payments, 2Settle, spend crypto, crypto to naira, crypto commerce"
         />
         <meta name="author" content="2Settle Team" />
+        <link rel="canonical" href="https://spend.2settle.io/" />
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
@@ -85,14 +86,29 @@ const Home: NextPage = () => {
           content="Send, spend, and integrate crypto payments across Africa using 2Settle's fast, reliable gateway."
         />
         <meta property="og:url" content="https://spend.2settle.io" />
+        <meta property="og:site_name" content="2Settle" />
+        <meta property="og:locale" content="en_NG" />
         <meta
           property="og:image"
-          content="https://spend.2settle.io/og-image.jpg"
+          content="https://spend.2settle.io/og-image.png?v=20261116"
+        />
+        <meta
+          property="og:image:secure_url"
+          content="https://spend.2settle.io/og-image.png?v=20261116"
+        />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1733" />
+        <meta property="og:image:height" content="907" />
+        <meta
+          property="og:image:alt"
+          content="Spend Crypto. Receive Naira. Fast, secure crypto-to-fiat payments with 2Settle."
         />
         <meta property="og:type" content="website" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:site" content="@2SettleHQ" />
+        <meta name="twitter:creator" content="@2SettleHQ" />
         <meta
           name="twitter:title"
           content="2Settle – Crypto to Fiat Payments for Africa"
@@ -103,7 +119,11 @@ const Home: NextPage = () => {
         />
         <meta
           name="twitter:image"
-          content="https://spend.2settle.io/og-image.jpg"
+          content="https://spend.2settle.io/og-image.png?v=20261116"
+        />
+        <meta
+          name="twitter:image:alt"
+          content="Spend Crypto. Receive Naira. Fast, secure crypto-to-fiat payments with 2Settle."
         />
         {/* web favicon */}
         <link rel="me" href="https://twitter.com/2settlehq" />
