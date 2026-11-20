@@ -16,6 +16,7 @@ import {
 import { handleTransferFormSubmission } from "@/features/chatbot/handlers/chatHandlers/handle.ai.chat";
 import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
 import { useFormWalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
+import { useAmountLimitValidation } from "@/hooks/chatbot/useAmountLimitValidation";
 import { WalletAssetNotice } from "@/components/chatbot/WalletAssetNotice";
 import {
   PaymentMethodChoice,
@@ -163,6 +164,11 @@ export default function TransferForm({
       : form.estimation === "dollar"
         ? "USD"
         : "NGN";
+  const amountError = useAmountLimitValidation({
+    amount: form.amount,
+    crypto: form.crypto,
+    estimation: form.estimation,
+  });
 
   useEffect(() => {
     if (!formId) return;
@@ -235,6 +241,7 @@ export default function TransferForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (amountError) return;
 
     if (
       !form.crypto ||
@@ -488,9 +495,24 @@ export default function TransferForm({
           onValueChange={(amount) => update("amount", amount)}
           formatAsCurrency={form.estimation !== "crypto"}
           placeholder="Enter amount"
-          className="h-9 px-2.5 !text-base md:!text-xs"
+          aria-invalid={Boolean(amountError)}
+          aria-describedby={
+            amountError ? "chat-transfer-amount-error" : undefined
+          }
+          className={`h-9 px-2.5 !text-base md:!text-xs ${
+            amountError ? "border-red-500 focus-visible:ring-red-500" : ""
+          }`}
           required
         />
+        {amountError && (
+          <p
+            id="chat-transfer-amount-error"
+            role="alert"
+            className="mt-1 text-[11px] leading-4 text-red-500"
+          >
+            {amountError}
+          </p>
+        )}
       </div>
 
       <BankDetailsInputs

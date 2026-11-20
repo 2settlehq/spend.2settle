@@ -23,6 +23,7 @@ import {
 } from "@/features/chatbot/handlers/chatHandlers/handle.ai.chat";
 import { useSupportedAssets } from "@/hooks/wallet/useSupportedAssets";
 import { useFormWalletDebit } from "@/hooks/chatbot/useFormWalletDebit";
+import { useAmountLimitValidation } from "@/hooks/chatbot/useAmountLimitValidation";
 import { WalletAssetNotice } from "@/components/chatbot/WalletAssetNotice";
 import {
   PaymentMethodChoice,
@@ -202,6 +203,7 @@ interface CryptoFieldsProps {
   onNetworkChange: (network: string) => void;
   onEstimationChange?: (estimation: string) => void;
   onAmountChange?: (amount: string) => void;
+  amountError?: string;
   restrictToConnectedWallet?: boolean;
 }
 
@@ -215,6 +217,7 @@ function CryptoFields({
   onNetworkChange,
   onEstimationChange,
   onAmountChange,
+  amountError = "",
   restrictToConnectedWallet = true,
 }: CryptoFieldsProps) {
   const hasAmount = amount !== undefined && onAmountChange;
@@ -356,9 +359,24 @@ function CryptoFields({
             onValueChange={onAmountChange}
             formatAsCurrency={estimation !== "crypto"}
             placeholder="Enter amount"
-            className={INPUT_CLASS}
+            aria-invalid={Boolean(amountError)}
+            aria-describedby={
+              amountError ? `${idPrefix}-amount-error` : undefined
+            }
+            className={`${INPUT_CLASS} ${
+              amountError ? "border-red-500 focus-visible:ring-red-500" : ""
+            }`}
             required
           />
+          {amountError && (
+            <p
+              id={`${idPrefix}-amount-error`}
+              role="alert"
+              className="mt-1 text-[11px] leading-4 text-red-500"
+            >
+              {amountError}
+            </p>
+          )}
         </div>
       )}
     </>
@@ -574,6 +592,11 @@ export function GiftForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethodChoiceValue | null>(null);
+  const amountError = useAmountLimitValidation({
+    amount: form.amount,
+    crypto: form.crypto,
+    estimation: form.estimation,
+  });
   const internationalPhoneNumber = normalizeInternationalPhoneNumber(
     form.phoneCountry,
     form.phoneNumber,
@@ -590,6 +613,7 @@ export function GiftForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (amountError) return;
     const phoneNumber = internationalPhoneNumber;
     if (
       !form.crypto ||
@@ -676,6 +700,7 @@ export function GiftForm({
         network={form.network}
         estimation={form.estimation}
         amount={form.amount}
+        amountError={amountError}
         onCryptoChange={(nextCrypto, network) =>
           update({ crypto: nextCrypto, network })
         }
@@ -743,6 +768,10 @@ export function RequestPaymentForm({
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const amountError = useAmountLimitValidation({
+    amount: form.amount,
+    request: true,
+  });
   const internationalPhoneNumber = normalizeInternationalPhoneNumber(
     form.phoneCountry,
     form.phoneNumber,
@@ -759,6 +788,7 @@ export function RequestPaymentForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (amountError) return;
     const phoneNumber = internationalPhoneNumber;
     if (
       !form.amount ||
@@ -820,9 +850,24 @@ export function RequestPaymentForm({
           value={form.amount}
           onValueChange={(amount) => update({ amount })}
           placeholder="Enter amount"
-          className={INPUT_CLASS}
+          aria-invalid={Boolean(amountError)}
+          aria-describedby={
+            amountError ? "chat-request-amount-error" : undefined
+          }
+          className={`${INPUT_CLASS} ${
+            amountError ? "border-red-500 focus-visible:ring-red-500" : ""
+          }`}
           required
         />
+        {amountError && (
+          <p
+            id="chat-request-amount-error"
+            role="alert"
+            className="mt-1 text-[11px] leading-4 text-red-500"
+          >
+            {amountError}
+          </p>
+        )}
       </div>
       <BankFields
         idPrefix="chat-request"

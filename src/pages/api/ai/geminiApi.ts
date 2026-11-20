@@ -14,6 +14,7 @@ import { StructuredOutputParser } from "@langchain/core/output_parsers";
 
 import crypto from "crypto";
 import { createBeneficiary } from "@/helpers/api_calls";
+import { formatCurrency } from "@/helpers/format_currency";
 import { resolveBankAccount } from "@/services/bank/bank.service";
 
 import { fetchRate } from "@/services/rate/rates.service";
@@ -1663,7 +1664,12 @@ export default async function handler(
       });
       updatedSession.verifier = true;
 
-      const reply = `Your gift claim is successful. The payout will be sent to ${bank.accountName}, ${bank.bankName} ${bank.accountNumber}.`;
+      const claimAmount = formatCurrency(
+        String(result.payment.fiatAmount),
+        result.payment.fiatCurrency || "NGN",
+        result.payment.fiatCurrency === "NGN" ? "en-NG" : "en-US",
+      );
+      const reply = `Your gift claim of ${claimAmount} is successful. The payout will be sent to ${bank.accountName}, ${bank.bankName} ${bank.accountNumber}.`;
       session[chatId] = {};
       userHistories.set(chatId, []);
       return res.status(200).json({ reply, claimGiftMode: true });
@@ -2310,7 +2316,12 @@ export default async function handler(
           updatedSession.giftReadyToClaim = true;
           updatedSession.verifier = false;
           updatedSession.Amount = String(result.payment.fiatAmount);
-          updatedSession.reply = `Gift ${updatedSession.id} is confirmed. Please provide your bank name so you can claim it.`;
+          const claimAmount = formatCurrency(
+            String(result.payment.fiatAmount),
+            result.payment.fiatCurrency || "NGN",
+            result.payment.fiatCurrency === "NGN" ? "en-NG" : "en-US",
+          );
+          updatedSession.reply = `Gift ${updatedSession.id} is confirmed for ${claimAmount}. Please provide your bank name so you can claim it.`;
         } else if (status === "settled" || status === "settling") {
           updatedSession.reply = "This gift has already been claimed.";
           updatedSession.verifier = true;
@@ -2415,7 +2426,12 @@ export default async function handler(
         };
         shouldClearSessionAfterEngineCall = true;
         await claimGift(updatedSession.giftId, gift);
-        updatedSession.reply = `Your gift claim is successful. The payout will be sent to ${updatedSession.receiver_name}, ${updatedSession.bank_name} ${updatedSession.acct_number}.`;
+        const claimAmount = formatCurrency(
+          String(updatedSession.Amount),
+          "NGN",
+          "en-NG",
+        );
+        updatedSession.reply = `Your gift claim of ${claimAmount} is successful. The payout will be sent to ${updatedSession.receiver_name}, ${updatedSession.bank_name} ${updatedSession.acct_number}.`;
       } catch (error: any) {
         console.error("Claim gift error:", error?.response?.data ?? error);
         const claimError = error?.response?.data?.error;
